@@ -43,6 +43,13 @@ st.markdown("""
     .scen-label { font-family: monospace; font-size: 12px; font-weight: 700;
         letter-spacing: 0.08em; margin-bottom: 8px; }
     .scen-text { font-size: 12px; color: #aab8d0; line-height: 1.7; }
+    .sec-row {
+        display: flex; align-items: center; gap: 10px;
+        padding: 6px 0; border-bottom: 1px solid #1a2236;
+    }
+    .sec-rank { font-family: monospace; font-size: 11px; color: #6a7d98; width: 22px; }
+    .sec-name { font-size: 12px; color: #dce8f8; flex: 1; }
+    .sec-pct { font-family: monospace; font-size: 12px; font-weight: 600; width: 64px; text-align: right; }
     .stTabs [data-baseweb="tab"] { font-family: monospace; font-size: 12px; }
 </style>
 """, unsafe_allow_html=True)
@@ -73,6 +80,18 @@ def get_yahoo_52w(symbol):
     except Exception:
         return None, None
 
+@st.cache_data(ttl=1800)
+def get_weekly_return(symbol):
+    try:
+        data = yf.Ticker(symbol).history(period="1mo")
+        if len(data) >= 6:
+            now = data["Close"].iloc[-1]
+            week_ago = data["Close"].iloc[-6]
+            return (now - week_ago) / week_ago * 100
+        return None
+    except Exception:
+        return None
+
 @st.cache_data(ttl=3600)
 def get_fred_latest(series_id):
     try:
@@ -91,11 +110,27 @@ def get_cpi_yoy():
     except Exception:
         return None
 
+@st.cache_data(ttl=1800)
+def compute_sector_rs():
+    sectors = {
+        "반도체·IT": "XLK", "방산·항공": "ITA", "금융": "XLF",
+        "헬스케어": "XLV", "에너지": "XLE", "필수소비": "XLP",
+        "임의소비": "XLY", "산업재": "XLI", "소재": "XLB",
+        "유틸리티": "XLU", "부동산": "XLRE", "커뮤니케이션": "XLC",
+    }
+    results = []
+    for name, ticker in sectors.items():
+        ret = get_weekly_return(ticker)
+        if ret is not None:
+            results.append((name, ticker, ret))
+    results.sort(key=lambda x: x[2], reverse=True)
+    return results
+
 kst = datetime.now(pytz.timezone("Asia/Seoul"))
 now_str = kst.strftime("%Y.%m.%d %H:%M")
 
 st.markdown("# IJ-HUB")
-st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | 발산 감지 + 시나리오")
+st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | 섹터 RS 자동 계산")
 
 vix, vix_chg = get_yahoo("^VIX")
 spx, spx_chg = get_yahoo("^GSPC")
@@ -104,7 +139,14 @@ hy, hy_chg = get_fred_latest("BAMLH0A0HYM2")
 y10, _ = get_fred_latest("DGS10")
 y2, _ = get_fred_latest("DGS2")
 cpi = get_cpi_yoy()
-krw, krw_chg = get_yahoo("KRW=X")
+
+sector_rs = compute_sector_rs()
+if sector_rs:
+    top_sectors = " · ".join([s[0] for s in sector_rs[:3]])
+    strong_sector = sector_rs[0][0]
+else:
+    top_sectors = "데이터 수집 실패"
+    strong_sector = "주요 섹터"
 
 def judge_regime(vix, hy):
     score = 0
@@ -164,29 +206,45 @@ with c3:
 
 st.divider()
 
+st.subheader("🏆 섹터 상대강도 — 자동 계산 (주간 수익률 기준)")
+if sector_rs:
+    rcol1, rcol2 = st.columns(2)
+    half = (len(sector_rs) + 1) // 2
+    for ci, group in enumerate([sector_rs[:half], sector_rs[half:]]):
+        target = rcol1 if ci == 0 else rcol2
+        with target:
+            for rank, (name, ticker, ret) in enumerate(group, start=(1 if ci == 0 else half + 1)):
+                color = "#1ecc7a" if ret > 0 else "#e04858"
+                h = ('<div class="sec-row">'
+                     '<span class="sec-rank">' + format(rank, "02d") + '</span>'
+                     '<span class="sec-name">' + name + ' (' + ticker + ')</span>'
+                     '<span class="sec-pct" style="color:' + color + '">' + format(ret, "+.2f") + '%</span>'
+                     '</div>')
+                st.markdown(h, unsafe_allow_html=True)
+    st.caption("강세 Top3: " + top_sectors + " | 11개 섹터 ETF 주간 비교")
+else:
+    st.warning("섹터 데이터 수집 실패 — 잠시 후 새로고침")
+
+st.divider()
+
 st.subheader("🔀 발산 감지 — 지표 간 모순 자동 탐지")
-
 divergences = []
-
 if vix is not None and spx_52w is not None:
     if vix < 16 and spx_52w > 85:
         divergences.append(("high", "VIX 저점 ↔ 주가 고점권",
             "VIX " + format(vix, ".1f") + " (매우 낮음) + S&P 52주 " + format(spx_52w, ".0f") + "%ile (고점 부근)",
             "과도한 안도감 신호. 작은 악재에도 변동성 급등 가능."))
-
 if y10 is not None and y2 is not None and spx_52w is not None:
     spread = (y10 - y2) * 100
     if spread < 0 and spx_52w > 75:
         divergences.append(("mid", "금리 역전 ↔ 주가 강세",
             "2s10s " + format(spread, ".0f") + "bp 역전 (침체 선행) + S&P 52주 " + format(spx_52w, ".0f") + "%ile",
             "채권시장은 침체 경고, 주식시장은 낙관. 역사적으로 채권이 먼저 맞은 경우 많음."))
-
 if cpi is not None and hy is not None:
     if cpi > 3.0 and hy < 3.5:
         divergences.append(("mid", "인플레 잔존 ↔ 신용 안일",
             "CPI " + format(cpi, ".1f") + "% (목표 상회) + HY스프레드 " + format(hy, ".2f") + "% (매우 타이트)",
             "물가 부담 남았는데 신용시장은 무위험 인식. 재반등 시 스프레드 급확대 위험."))
-
 if vix is not None and hy is not None:
     if vix < 18 and hy > 4.5:
         divergences.append(("high", "주식 평온 ↔ 신용 경고",
@@ -206,27 +264,25 @@ else:
 st.divider()
 
 st.subheader("📋 시나리오 — Bear / Base / Bull")
-
 div_count = len(divergences)
-strong_sector = "반도체·AI"
 spread_txt = format((y10 - y2) * 100, ".0f") + "bp" if (y10 and y2) else "-"
 cpi_txt = format(cpi, ".1f") + "%" if cpi else "-"
 hy_txt = format(hy, ".2f") + "%" if hy else "-"
 
 bear_text = ("현 국면 [" + regime + "]에도 발산 " + str(div_count) + "건 감지. "
-    "특히 신용스프레드(" + hy_txt + ")가 확대 전환하거나 CPI(" + cpi_txt + ") 재반등 시 "
+    "신용스프레드(" + hy_txt + ") 확대 전환 또는 CPI(" + cpi_txt + ") 재반등 시 "
     "위험자산 동시 조정 가능. 2s10s(" + spread_txt + ") 추가 역전은 침체 우려 자극. "
-    "VIX 급등 시 빠른 포지션 청산 주의.")
+    "현 강세 섹터(" + strong_sector + ")도 변동성 국면 전환 시 차익실현 압력.")
 
 base_text = ("국면 점수 " + str(regime_score) + " 기준 현 추세 유지가 기본선. "
-    "신용시장 건전(" + hy_txt + ")하고 VIX 안정적이면 " + strong_sector + " 주도 지속. "
-    "발산 신호는 잠재 리스크로 두되, 명확한 트리거 부재 시 급변 가능성 낮음. "
-    "주요 이벤트(CPI·FOMC) 전후 관망 권장.")
+    "신용 건전(" + hy_txt + ") + VIX 안정 시 " + strong_sector + " 주도 지속. "
+    "발산 신호는 잠재 리스크로 두되, 트리거 부재 시 급변 가능성 낮음. "
+    "이벤트(CPI·FOMC) 전후 관망 권장.")
 
-bull_text = ("신용스프레드 추가 타이트 + VIX 추가 하락 시 위험선호 강화. "
-    "CPI(" + cpi_txt + ") 둔화 지속되고 금리 하락 전환 시 성장주 밸류 재평가. "
-    + strong_sector + " 실적 서프라이즈가 추가 상승 견인 가능. "
-    "단, 현 발산 신호가 상단을 제한할 수 있어 과열 경계.")
+bull_text = ("신용 추가 타이트 + VIX 추가 하락 시 위험선호 강화. "
+    "CPI(" + cpi_txt + ") 둔화 지속 + 금리 하락 전환 시 성장주 밸류 재평가. "
+    + strong_sector + " 모멘텀 가속이 추가 상승 견인 가능. "
+    "단, 현 발산 신호가 상단 제한 가능 — 과열 경계.")
 
 sc1, sc2, sc3 = st.columns(3)
 with sc1:
@@ -242,7 +298,7 @@ with sc3:
          '<div class="scen-text">' + bull_text + '</div></div>')
     st.markdown(h, unsafe_allow_html=True)
 
-st.caption("규칙 기반 자동 생성 · 현재 데이터 조합 반영 · Bear 우선 표시")
+st.caption("규칙 기반 자동 생성 · 강세 섹터 실시간 반영 · Bear 우선")
 
 st.divider()
 
@@ -304,4 +360,4 @@ with tab3:
             cols[i % 3].metric(name, "-")
 
 st.divider()
-st.caption("데이터: Yahoo Finance(15분 지연) + FRED(미연준) | 발산·시나리오 무료 규칙 기반")
+st.caption("데이터: Yahoo Finance(15분 지연) + FRED(미연준) | 섹터 RS 자동 계산 무료")
