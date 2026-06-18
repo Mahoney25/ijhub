@@ -3,6 +3,7 @@ import yfinance as yf
 from fredapi import Fred
 from datetime import datetime
 import pytz
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="IJ-HUB", layout="wide", page_icon="📊")
 
@@ -50,6 +51,10 @@ st.markdown("""
     .sec-rank { font-family: monospace; font-size: 11px; color: #6a7d98; width: 22px; }
     .sec-name { font-size: 12px; color: #dce8f8; flex: 1; }
     .sec-pct { font-family: monospace; font-size: 12px; font-weight: 600; width: 64px; text-align: right; }
+    .trend-box {
+        background: #10151f; border: 1px solid #2a3d5a; border-radius: 8px;
+        padding: 14px 16px; margin-top: 8px;
+    }
     .stTabs [data-baseweb="tab"] { font-family: monospace; font-size: 12px; }
 </style>
 """, unsafe_allow_html=True)
@@ -105,6 +110,17 @@ def get_overnight():
             out.append((name, val, chg))
     return out
 
+@st.cache_data(ttl=1800)
+def get_ohlc(symbol, interval):
+    try:
+        period = "2y" if interval == "1wk" else "5y"
+        data = yf.Ticker(symbol).history(period=period, interval=interval)
+        if len(data) >= 10:
+            return data
+        return None
+    except Exception:
+        return None
+
 @st.cache_data(ttl=3600)
 def get_fred_latest(series_id):
     try:
@@ -139,13 +155,56 @@ def compute_sector_rs():
     results.sort(key=lambda x: x[2], reverse=True)
     return results
 
+def analyze_trend(data):
+    close = data["Close"]
+    ma_short = close.rolling(10).mean().iloc[-1]
+    ma_long = close.rolling(30).mean().iloc[-1] if len(close) >= 30 else close.rolling(len(close)).mean().iloc[-1]
+    now = close.iloc[-1]
+    msgs = []
+    if now > ma_short > ma_long:
+        msgs.append(("정배열", "#1ecc7a", "현재가 > 단기MA > 장기MA — 상승 추세 견고"))
+    elif now < ma_short < ma_long:
+        msgs.append(("역배열", "#e04858", "현재가 < 단기MA < 장기MA — 하락 추세"))
+    else:
+        msgs.append(("혼조", "#f0a030", "이동평균 배열 혼재 — 방향성 불분명, 관망"))
+    recent = (close.iloc[-1] - close.iloc[-5]) / close.iloc[-5] * 100 if len(close) >= 5 else 0
+    if recent > 3:
+        msgs.append(("모멘텀", "#1ecc7a", "최근 5봉 +" + format(recent, ".1f") + "% — 강한 상승 탄력"))
+    elif recent < -3:
+        msgs.append(("모멘텀", "#e04858", "최근 5봉 " + format(recent, ".1f") + "% — 하락 가속"))
+    else:
+        msgs.append(("모멘텀", "#6a7d98", "최근 5봉 " + format(recent, "+.1f") + "% — 횡보권"))
+    return msgs
+
+def make_chart(data, title):
+    fig = go.Figure(data=[go.Candlestick(
+        x=data.index,
+        open=data["Open"], high=data["High"],
+        low=data["Low"], close=data["Close"],
+        increasing_line_color="#1ecc7a", decreasing_line_color="#e04858",
+        name="가격",
+    )])
+    close = data["Close"]
+    fig.add_trace(go.Scatter(x=data.index, y=close.rolling(10).mean(),
+        line=dict(color="#4a8ef0", width=1), name="MA10"))
+    fig.add_trace(go.Scatter(x=data.index, y=close.rolling(30).mean(),
+        line=dict(color="#f0a030", width=1), name="MA30"))
+    fig.update_layout(
+        title=title, template="plotly_dark",
+        paper_bgcolor="#0a0d14", plot_bgcolor="#0a0d14",
+        height=380, margin=dict(l=10, r=10, t=40, b=10),
+        xaxis_rangeslider_visible=False,
+        font=dict(family="monospace", size=11, color="#aab8d0"),
+        legend=dict(orientation="h", y=1.02, x=0),
+    )
+    return fig
+
 kst = datetime.now(pytz.timezone("Asia/Seoul"))
 now_str = kst.strftime("%Y.%m.%d %H:%M")
 
 st.markdown("# IJ-HUB")
-st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | 야간선물 + 섹터 RS")
+st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | 야간선물+섹터RS+차트")
 
-# ─── 야간선물 상단 스트립 ───
 overnight = get_overnight()
 if overnight:
     strip = '<div style="background:#090c13;border:1px solid #1a2236;border-radius:6px;padding:8px 12px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;">'
@@ -331,6 +390,35 @@ st.caption("규칙 기반 자동 생성 · 강세 섹터 실시간 반영 · Bea
 
 st.divider()
 
+st.subheader("📈 차트 — 주봉 / 월봉 + 추세 해석")
+chart_targets = {
+    "S&P 500": "^GSPC", "나스닥": "^IXIC", "KOSPI": "^KS11",
+    "반도체 ETF (SOXX)": "SOXX", "NVIDIA": "NVDA", "삼성전자": "005930.KS",
+}
+ccol1, ccol2 = st.columns([1, 1])
+with ccol1:
+    sel_name = st.selectbox("종목 선택", list(chart_targets.keys()))
+with ccol2:
+    tf = st.radio("기간", ["주봉", "월봉"], horizontal=True)
+
+interval = "1wk" if tf == "주봉" else "1mo"
+ohlc = get_ohlc(chart_targets[sel_name], interval)
+
+if ohlc is not None:
+    st.plotly_chart(make_chart(ohlc, sel_name + " (" + tf + ")"), use_container_width=True)
+    trend_msgs = analyze_trend(ohlc)
+    th = '<div class="trend-box"><div style="font-family:monospace;font-size:11px;color:#6a7d98;margin-bottom:8px;">🔍 추세 해석 (' + tf + ' 기준)</div>'
+    for label, color, desc in trend_msgs:
+        th += ('<div style="margin-bottom:6px;">'
+               '<span style="font-family:monospace;font-size:11px;font-weight:600;color:' + color + ';">[' + label + ']</span> '
+               '<span style="font-size:12px;color:#aab8d0;">' + desc + '</span></div>')
+    th += '</div>'
+    st.markdown(th, unsafe_allow_html=True)
+else:
+    st.warning("차트 데이터 수집 실패 — 다른 종목 선택 또는 잠시 후 재시도")
+
+st.divider()
+
 tab1, tab2, tab3 = st.tabs(["📈 시장", "🌍 매크로", "💱 환율-원자재"])
 
 with tab1:
@@ -389,4 +477,4 @@ with tab3:
             cols[i % 3].metric(name, "-")
 
 st.divider()
-st.caption("데이터: Yahoo Finance(15분 지연) + FRED(미연준) | 야간선물 5분 갱신")
+st.caption("데이터: Yahoo Finance + FRED | 차트 주봉2년/월봉5년 · MA10/MA30")
