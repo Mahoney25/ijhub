@@ -61,4 +61,4 @@ def get_cpi_yoy():
 
 kst = datetime.now(pytz.timezone("Asia/Seoul"))
 st.markdown("# IJ·HUB")
-st.caption(f"투자 판단 인텔리전스 허브 · {kst.strftime('%Y.%m.%d %H:%M')}
+st.caption("투자 판단 인텔리전스 허브 · {kst.strftime('%Y.%m.%d %H:%M')}
