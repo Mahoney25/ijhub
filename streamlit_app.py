@@ -24,6 +24,25 @@ st.markdown("""
         text-transform: uppercase; color: #6a7d98; }
     .jb-value { font-size: 26px; font-weight: 700; margin: 4px 0; }
     .jb-sub { font-size: 13px; color: #aab8d0; }
+    .div-card {
+        background: #10151f; border: 1px solid #2a3d5a;
+        border-radius: 7px; padding: 12px 15px; margin-bottom: 8px;
+    }
+    .div-card.high { border-left: 3px solid #e04858; }
+    .div-card.mid { border-left: 3px solid #f0a030; }
+    .div-pair { font-family: monospace; font-size: 12px; font-weight: 700; color: #dce8f8; }
+    .div-desc { font-size: 12px; color: #aab8d0; margin-top: 4px; }
+    .div-imp { font-size: 11px; color: #f0a030; margin-top: 5px; }
+    .scen-box {
+        background: #10151f; border: 1px solid #2a3d5a;
+        border-radius: 8px; padding: 16px 18px; height: 100%;
+    }
+    .scen-box.bear { border-top: 2px solid #e04858; }
+    .scen-box.base { border-top: 2px solid #4a8ef0; }
+    .scen-box.bull { border-top: 2px solid #1ecc7a; }
+    .scen-label { font-family: monospace; font-size: 12px; font-weight: 700;
+        letter-spacing: 0.08em; margin-bottom: 8px; }
+    .scen-text { font-size: 12px; color: #aab8d0; line-height: 1.7; }
     .stTabs [data-baseweb="tab"] { font-family: monospace; font-size: 12px; }
 </style>
 """, unsafe_allow_html=True)
@@ -31,11 +50,25 @@ st.markdown("""
 @st.cache_data(ttl=600)
 def get_yahoo(symbol):
     try:
-        data = yf.Ticker(symbol).history(period="2d")
+        data = yf.Ticker(symbol).history(period="5d")
         if len(data) >= 2:
             now = data["Close"].iloc[-1]
             prev = data["Close"].iloc[-2]
             return now, (now - prev) / prev * 100
+        return None, None
+    except Exception:
+        return None, None
+
+@st.cache_data(ttl=600)
+def get_yahoo_52w(symbol):
+    try:
+        data = yf.Ticker(symbol).history(period="1y")
+        if len(data) >= 20:
+            now = data["Close"].iloc[-1]
+            hi = data["Close"].max()
+            lo = data["Close"].min()
+            pct = (now - lo) / (hi - lo) * 100 if hi > lo else 50
+            return now, pct
         return None, None
     except Exception:
         return None, None
@@ -62,51 +95,48 @@ kst = datetime.now(pytz.timezone("Asia/Seoul"))
 now_str = kst.strftime("%Y.%m.%d %H:%M")
 
 st.markdown("# IJ-HUB")
-st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | Yahoo + FRED")
+st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | 발산 감지 + 시나리오")
 
 vix, vix_chg = get_yahoo("^VIX")
 spx, spx_chg = get_yahoo("^GSPC")
+spx_price, spx_52w = get_yahoo_52w("^GSPC")
 hy, hy_chg = get_fred_latest("BAMLH0A0HYM2")
+y10, _ = get_fred_latest("DGS10")
+y2, _ = get_fred_latest("DGS2")
+cpi = get_cpi_yoy()
+krw, krw_chg = get_yahoo("KRW=X")
 
 def judge_regime(vix, hy):
     score = 0
     reasons = []
     if vix is not None:
         if vix < 18:
-            score += 1
-            reasons.append("VIX " + format(vix, ".1f") + " 안정")
+            score += 1; reasons.append("VIX " + format(vix, ".1f") + " 안정")
         elif vix > 25:
-            score -= 1
-            reasons.append("VIX " + format(vix, ".1f") + " 경계")
+            score -= 1; reasons.append("VIX " + format(vix, ".1f") + " 경계")
         else:
             reasons.append("VIX " + format(vix, ".1f") + " 중립")
     if hy is not None:
         if hy < 3.5:
-            score += 1
-            reasons.append("신용스프레드 " + format(hy, ".2f") + "% 타이트")
+            score += 1; reasons.append("신용 " + format(hy, ".2f") + "% 타이트")
         elif hy > 5.0:
-            score -= 1
-            reasons.append("신용스프레드 " + format(hy, ".2f") + "% 확대")
+            score -= 1; reasons.append("신용 " + format(hy, ".2f") + "% 확대")
         else:
-            reasons.append("신용스프레드 " + format(hy, ".2f") + "% 보통")
+            reasons.append("신용 " + format(hy, ".2f") + "% 보통")
     if score >= 2:
-        return "Risk-On", "ok", " / ".join(reasons)
+        return "Risk-On", "ok", " / ".join(reasons), score
     elif score <= -1:
-        return "Risk-Off", "danger", " / ".join(reasons)
+        return "Risk-Off", "danger", " / ".join(reasons), score
     else:
-        return "중립", "warn", " / ".join(reasons)
+        return "중립", "warn", " / ".join(reasons), score
 
-regime, level, reason = judge_regime(vix, hy)
-
+regime, level, reason, regime_score = judge_regime(vix, hy)
 if level == "ok":
-    box_class = "judgment-box"
-    regime_color = "#1ecc7a"
+    box_class, regime_color = "judgment-box", "#1ecc7a"
 elif level == "warn":
-    box_class = "judgment-box warn"
-    regime_color = "#f0a030"
+    box_class, regime_color = "judgment-box warn", "#f0a030"
 else:
-    box_class = "judgment-box danger"
-    regime_color = "#e04858"
+    box_class, regime_color = "judgment-box danger", "#e04858"
 
 spx_str = format(spx, ",.0f") if spx is not None else "-"
 spx_sub = format(spx_chg, "+.2f") + "%" if spx_chg is not None else "-"
@@ -117,32 +147,102 @@ vix_col = "#1ecc7a" if (vix is not None and vix < 18) else "#f0a030"
 
 c1, c2, c3 = st.columns([2, 1, 1])
 with c1:
-    html1 = (
-        '<div class="' + box_class + '">'
-        '<div class="jb-label">시장 국면 판단</div>'
-        '<div class="jb-value" style="color:' + regime_color + '">' + regime + '</div>'
-        '<div class="jb-sub">' + reason + '</div>'
-        '</div>'
-    )
-    st.markdown(html1, unsafe_allow_html=True)
+    h = ('<div class="' + box_class + '"><div class="jb-label">시장 국면 판단</div>'
+         '<div class="jb-value" style="color:' + regime_color + '">' + regime + '</div>'
+         '<div class="jb-sub">' + reason + '</div></div>')
+    st.markdown(h, unsafe_allow_html=True)
 with c2:
-    html2 = (
-        '<div class="judgment-box">'
-        '<div class="jb-label">S&P 500</div>'
-        '<div class="jb-value" style="color:' + spx_col + '">' + spx_str + '</div>'
-        '<div class="jb-sub">' + spx_sub + '</div>'
-        '</div>'
-    )
-    st.markdown(html2, unsafe_allow_html=True)
+    h = ('<div class="judgment-box"><div class="jb-label">S&P 500</div>'
+         '<div class="jb-value" style="color:' + spx_col + '">' + spx_str + '</div>'
+         '<div class="jb-sub">' + spx_sub + '</div></div>')
+    st.markdown(h, unsafe_allow_html=True)
 with c3:
-    html3 = (
-        '<div class="judgment-box">'
-        '<div class="jb-label">VIX 변동성</div>'
-        '<div class="jb-value" style="color:' + vix_col + '">' + vix_str + '</div>'
-        '<div class="jb-sub">' + vix_sub + '</div>'
-        '</div>'
-    )
-    st.markdown(html3, unsafe_allow_html=True)
+    h = ('<div class="judgment-box"><div class="jb-label">VIX 변동성</div>'
+         '<div class="jb-value" style="color:' + vix_col + '">' + vix_str + '</div>'
+         '<div class="jb-sub">' + vix_sub + '</div></div>')
+    st.markdown(h, unsafe_allow_html=True)
+
+st.divider()
+
+st.subheader("🔀 발산 감지 — 지표 간 모순 자동 탐지")
+
+divergences = []
+
+if vix is not None and spx_52w is not None:
+    if vix < 16 and spx_52w > 85:
+        divergences.append(("high", "VIX 저점 ↔ 주가 고점권",
+            "VIX " + format(vix, ".1f") + " (매우 낮음) + S&P 52주 " + format(spx_52w, ".0f") + "%ile (고점 부근)",
+            "과도한 안도감 신호. 작은 악재에도 변동성 급등 가능."))
+
+if y10 is not None and y2 is not None and spx_52w is not None:
+    spread = (y10 - y2) * 100
+    if spread < 0 and spx_52w > 75:
+        divergences.append(("mid", "금리 역전 ↔ 주가 강세",
+            "2s10s " + format(spread, ".0f") + "bp 역전 (침체 선행) + S&P 52주 " + format(spx_52w, ".0f") + "%ile",
+            "채권시장은 침체 경고, 주식시장은 낙관. 역사적으로 채권이 먼저 맞은 경우 많음."))
+
+if cpi is not None and hy is not None:
+    if cpi > 3.0 and hy < 3.5:
+        divergences.append(("mid", "인플레 잔존 ↔ 신용 안일",
+            "CPI " + format(cpi, ".1f") + "% (목표 상회) + HY스프레드 " + format(hy, ".2f") + "% (매우 타이트)",
+            "물가 부담 남았는데 신용시장은 무위험 인식. 재반등 시 스프레드 급확대 위험."))
+
+if vix is not None and hy is not None:
+    if vix < 18 and hy > 4.5:
+        divergences.append(("high", "주식 평온 ↔ 신용 경고",
+            "VIX " + format(vix, ".1f") + " (낮음) + HY스프레드 " + format(hy, ".2f") + "% (확대 중)",
+            "주식은 평온한데 신용시장에 스트레스. 신용이 보통 선행 — 주의."))
+
+if divergences:
+    for sev, pair, desc, imp in divergences:
+        h = ('<div class="div-card ' + sev + '">'
+             '<div class="div-pair">⚠ ' + pair + '</div>'
+             '<div class="div-desc">' + desc + '</div>'
+             '<div class="div-imp">→ ' + imp + '</div></div>')
+        st.markdown(h, unsafe_allow_html=True)
+else:
+    st.success("✓ 현재 주요 지표 간 모순 신호 없음 — 정렬 상태")
+
+st.divider()
+
+st.subheader("📋 시나리오 — Bear / Base / Bull")
+
+div_count = len(divergences)
+strong_sector = "반도체·AI"
+spread_txt = format((y10 - y2) * 100, ".0f") + "bp" if (y10 and y2) else "-"
+cpi_txt = format(cpi, ".1f") + "%" if cpi else "-"
+hy_txt = format(hy, ".2f") + "%" if hy else "-"
+
+bear_text = ("현 국면 [" + regime + "]에도 발산 " + str(div_count) + "건 감지. "
+    "특히 신용스프레드(" + hy_txt + ")가 확대 전환하거나 CPI(" + cpi_txt + ") 재반등 시 "
+    "위험자산 동시 조정 가능. 2s10s(" + spread_txt + ") 추가 역전은 침체 우려 자극. "
+    "VIX 급등 시 빠른 포지션 청산 주의.")
+
+base_text = ("국면 점수 " + str(regime_score) + " 기준 현 추세 유지가 기본선. "
+    "신용시장 건전(" + hy_txt + ")하고 VIX 안정적이면 " + strong_sector + " 주도 지속. "
+    "발산 신호는 잠재 리스크로 두되, 명확한 트리거 부재 시 급변 가능성 낮음. "
+    "주요 이벤트(CPI·FOMC) 전후 관망 권장.")
+
+bull_text = ("신용스프레드 추가 타이트 + VIX 추가 하락 시 위험선호 강화. "
+    "CPI(" + cpi_txt + ") 둔화 지속되고 금리 하락 전환 시 성장주 밸류 재평가. "
+    + strong_sector + " 실적 서프라이즈가 추가 상승 견인 가능. "
+    "단, 현 발산 신호가 상단을 제한할 수 있어 과열 경계.")
+
+sc1, sc2, sc3 = st.columns(3)
+with sc1:
+    h = ('<div class="scen-box bear"><div class="scen-label" style="color:#e04858">▼ BEAR</div>'
+         '<div class="scen-text">' + bear_text + '</div></div>')
+    st.markdown(h, unsafe_allow_html=True)
+with sc2:
+    h = ('<div class="scen-box base"><div class="scen-label" style="color:#4a8ef0">— BASE</div>'
+         '<div class="scen-text">' + base_text + '</div></div>')
+    st.markdown(h, unsafe_allow_html=True)
+with sc3:
+    h = ('<div class="scen-box bull"><div class="scen-label" style="color:#1ecc7a">▲ BULL</div>'
+         '<div class="scen-text">' + bull_text + '</div></div>')
+    st.markdown(h, unsafe_allow_html=True)
+
+st.caption("규칙 기반 자동 생성 · 현재 데이터 조합 반영 · Bear 우선 표시")
 
 st.divider()
 
@@ -165,7 +265,6 @@ with tab1:
 
 with tab2:
     st.subheader("매크로 / 금리 / 신용")
-    cpi = get_cpi_yoy()
     macro = {
         "10년물 금리": "DGS10", "2년물 금리": "DGS2",
         "실업률": "UNRATE", "HY 신용스프레드": "BAMLH0A0HYM2",
@@ -181,8 +280,6 @@ with tab2:
         else:
             cols[idx % 3].metric(name, "-")
         idx += 1
-    y10, _ = get_fred_latest("DGS10")
-    y2, _ = get_fred_latest("DGS2")
     if y10 is not None and y2 is not None:
         spread = (y10 - y2) * 100
         st.divider()
@@ -207,4 +304,4 @@ with tab3:
             cols[i % 3].metric(name, "-")
 
 st.divider()
-st.caption("데이터: Yahoo Finance(15분 지연) + FRED(미연준) | 캐시 10분~1시간")
+st.caption("데이터: Yahoo Finance(15분 지연) + FRED(미연준) | 발산·시나리오 무료 규칙 기반")
