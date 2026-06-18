@@ -1,75 +1,64 @@
 import streamlit as st
 import yfinance as yf
 from fredapi import Fred
+from datetime import datetime
+import pytz
 
-st.set_page_config(page_title="IJ·HUB", layout="wide")
+st.set_page_config(page_title="IJ·HUB", layout="wide", page_icon="📊")
 
-st.title("IJ·HUB — 시장 + 매크로 통합")
-st.caption("Yahoo Finance + FRED 실시간 연동")
+st.markdown("""
+<style>
+    .stApp { background-color: #0a0d14; }
+    .main .block-container { padding-top: 2rem; max-width: 1200px; }
+    h1, h2, h3 { color: #dce8f8 !important; font-family: monospace; }
+    [data-testid="stMetricValue"] { font-family: monospace; font-size: 1.3rem; }
+    [data-testid="stMetricLabel"] { font-family: monospace; color: #6a7d98 !important; }
+    .judgment-box {
+        background: linear-gradient(135deg, #10151f, #141a26);
+        border: 1px solid #2a3d5a; border-left: 3px solid #1ecc7a;
+        border-radius: 8px; padding: 18px 22px; margin-bottom: 8px;
+    }
+    .judgment-box.warn { border-left-color: #f0a030; }
+    .judgment-box.danger { border-left-color: #e04858; }
+    .jb-label { font-family: monospace; font-size: 11px; letter-spacing: 0.1em;
+        text-transform: uppercase; color: #6a7d98; }
+    .jb-value { font-size: 26px; font-weight: 700; margin: 4px 0; }
+    .jb-sub { font-size: 13px; color: #aab8d0; }
+    .stTabs [data-baseweb="tab-list"] { gap: 4px; }
+    .stTabs [data-baseweb="tab"] { font-family: monospace; font-size: 12px; }
+</style>
+""", unsafe_allow_html=True)
 
-# ─── 비밀 금고에서 FRED 키 꺼내기 ───
-fred = Fred(api_key=st.secrets["FRED_API_KEY"])
-
-# ═══ 1. 시장 데이터 (Yahoo) ═══
-st.header("📈 시장 지표")
-
-tickers = {
-    "S&P 500": "^GSPC",
-    "나스닥": "^IXIC",
-    "KOSPI": "^KS11",
-    "USD/KRW": "KRW=X",
-    "S&P 선물": "ES=F",
-    "VIX": "^VIX",
-    "WTI 원유": "CL=F",
-    "금": "GC=F",
-    "USD/JPY": "JPY=X",
-}
-
-cols = st.columns(3)
-for i, (name, symbol) in enumerate(tickers.items()):
+@st.cache_data(ttl=600)
+def get_yahoo(symbol):
     try:
         data = yf.Ticker(symbol).history(period="2d")
         if len(data) >= 2:
             now = data["Close"].iloc[-1]
             prev = data["Close"].iloc[-2]
-            change = (now - prev) / prev * 100
-            cols[i % 3].metric(name, f"{now:,.2f}", f"{change:+.2f}%")
-        else:
-            cols[i % 3].metric(name, "데이터 없음")
+            return now, (now - prev) / prev * 100
+        return None, None
     except Exception:
-        cols[i % 3].metric(name, "실패")
+        return None, None
 
-st.divider()
-
-# ═══ 2. 매크로 데이터 (FRED) ═══
-st.header("🌍 매크로 지표")
-
-# FRED 시리즈 ID 정의
-fred_series = {
-    "CPI (전년비)": "CPIAUCSL",
-    "10년물 금리": "DGS10",
-    "2년물 금리": "DGS2",
-    "실업률": "UNRATE",
-    "HY 신용스프레드": "BAMLH0A0HYM2",
-    "연준 기준금리": "DFEDTARU",
-}
-
-mcols = st.columns(3)
-for i, (name, series_id) in enumerate(fred_series.items()):
+@st.cache_data(ttl=3600)
+def get_fred_latest(series_id):
     try:
+        fred = Fred(api_key=st.secrets["FRED_API_KEY"])
         s = fred.get_series(series_id).dropna()
-        latest = s.iloc[-1]
-        prev = s.iloc[-2]
-        change = latest - prev
-
-        # CPI는 전년비로 변환
-        if series_id == "CPIAUCSL":
-            yoy = (s.iloc[-1] / s.iloc[-13] - 1) * 100
-            mcols[i % 3].metric(name, f"{yoy:.2f}%")
-        else:
-            mcols[i % 3].metric(name, f"{latest:.2f}", f"{change:+.2f}")
+        return s.iloc[-1], s.iloc[-1] - s.iloc[-2]
     except Exception:
-        mcols[i % 3].metric(name, "실패")
+        return None, None
 
-st.divider()
-st.caption("데이터: Yahoo Finance + FRED(미연준) · 새로고침 시 갱신")
+@st.cache_data(ttl=3600)
+def get_cpi_yoy():
+    try:
+        fred = Fred(api_key=st.secrets["FRED_API_KEY"])
+        s = fred.get_series("CPIAUCSL").dropna()
+        return (s.iloc[-1] / s.iloc[-13] - 1) * 100
+    except Exception:
+        return None
+
+kst = datetime.now(pytz.timezone("Asia/Seoul"))
+st.markdown("# IJ·HUB")
+st.caption(f"투자 판단 인텔리전스 허브 · {kst.strftime('%Y.%m.%d %H:%M')}
