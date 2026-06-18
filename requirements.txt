@@ -1,0 +1,4 @@
+streamlit
+yfinance
+pandas
+5. "Commit changes" → 팝업에서 다시 "Commit changes"
