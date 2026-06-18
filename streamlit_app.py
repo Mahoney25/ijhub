@@ -92,6 +92,19 @@ def get_weekly_return(symbol):
     except Exception:
         return None
 
+@st.cache_data(ttl=300)
+def get_overnight():
+    futures = {
+        "S&P": "ES=F", "나스닥": "NQ=F", "다우": "YM=F",
+        "VIX": "^VIX", "WTI": "CL=F", "금": "GC=F", "USD/KRW": "KRW=X",
+    }
+    out = []
+    for name, sym in futures.items():
+        val, chg = get_yahoo(sym)
+        if val is not None:
+            out.append((name, val, chg))
+    return out
+
 @st.cache_data(ttl=3600)
 def get_fred_latest(series_id):
     try:
@@ -130,7 +143,23 @@ kst = datetime.now(pytz.timezone("Asia/Seoul"))
 now_str = kst.strftime("%Y.%m.%d %H:%M")
 
 st.markdown("# IJ-HUB")
-st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | 섹터 RS 자동 계산")
+st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | 야간선물 + 섹터 RS")
+
+# ─── 야간선물 상단 스트립 ───
+overnight = get_overnight()
+if overnight:
+    strip = '<div style="background:#090c13;border:1px solid #1a2236;border-radius:6px;padding:8px 12px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;">'
+    strip += '<span style="font-family:monospace;font-size:10px;color:#3d5070;font-weight:600;">🌙 야간선물</span>'
+    for name, val, chg in overnight:
+        col = "#1ecc7a" if (chg or 0) >= 0 else "#e04858"
+        arrow = "▲" if (chg or 0) >= 0 else "▼"
+        strip += ('<span style="font-family:monospace;font-size:11px;">'
+                  '<span style="color:#6a7d98;">' + name + '</span> '
+                  '<span style="color:#dce8f8;font-weight:600;">' + format(val, ",.1f") + '</span> '
+                  '<span style="color:' + col + ';">' + arrow + format(abs(chg), ".2f") + '%</span>'
+                  '</span>')
+    strip += '</div>'
+    st.markdown(strip, unsafe_allow_html=True)
 
 vix, vix_chg = get_yahoo("^VIX")
 spx, spx_chg = get_yahoo("^GSPC")
@@ -360,4 +389,4 @@ with tab3:
             cols[i % 3].metric(name, "-")
 
 st.divider()
-st.caption("데이터: Yahoo Finance(15분 지연) + FRED(미연준) | 섹터 RS 자동 계산 무료")
+st.caption("데이터: Yahoo Finance(15분 지연) + FRED(미연준) | 야간선물 5분 갱신")
