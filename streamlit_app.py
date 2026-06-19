@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 from fredapi import Fred
 from datetime import datetime
+import pandas as pd
 import pytz
 import plotly.graph_objects as go
 
@@ -55,6 +56,14 @@ st.markdown("""
         background: #10151f; border: 1px solid #2a3d5a; border-radius: 8px;
         padding: 14px 16px; margin-top: 8px;
     }
+    .earn-row {
+        display: flex; align-items: center; gap: 12px;
+        padding: 9px 12px; border-bottom: 1px solid #1a2236;
+    }
+    .earn-dday { font-family: monospace; font-size: 11px; font-weight: 700;
+        min-width: 52px; padding: 3px 8px; border-radius: 4px; text-align: center; }
+    .earn-name { font-size: 13px; color: #dce8f8; flex: 1; font-weight: 600; }
+    .earn-date { font-family: monospace; font-size: 11px; color: #6a7d98; }
     .stTabs [data-baseweb="tab"] { font-family: monospace; font-size: 12px; }
 </style>
 """, unsafe_allow_html=True)
@@ -117,6 +126,32 @@ def get_ohlc(symbol, interval):
         data = yf.Ticker(symbol).history(period=period, interval=interval)
         if len(data) >= 10:
             return data
+        return None
+    except Exception:
+        return None
+
+@st.cache_data(ttl=3600)
+def get_earnings_date(symbol):
+    try:
+        t = yf.Ticker(symbol)
+        try:
+            cal = t.calendar
+            if isinstance(cal, dict) and cal.get("Earnings Date"):
+                ed = cal["Earnings Date"]
+                if isinstance(ed, list) and len(ed) > 0:
+                    return ed[0]
+                return ed
+        except Exception:
+            pass
+        try:
+            df = t.get_earnings_dates(limit=8)
+            if df is not None and len(df) > 0:
+                now = pd.Timestamp.now(tz=df.index.tz)
+                future = df[df.index >= now]
+                if len(future) > 0:
+                    return future.index.min().date()
+        except Exception:
+            pass
         return None
     except Exception:
         return None
@@ -203,7 +238,7 @@ kst = datetime.now(pytz.timezone("Asia/Seoul"))
 now_str = kst.strftime("%Y.%m.%d %H:%M")
 
 st.markdown("# IJ-HUB")
-st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | 야간선물+섹터RS+차트")
+st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | 야간선물+섹터+차트+실적")
 
 overnight = get_overnight()
 if overnight:
@@ -390,6 +425,53 @@ st.caption("규칙 기반 자동 생성 · 강세 섹터 실시간 반영 · Bea
 
 st.divider()
 
+st.subheader("📅 실적 캘린더 — 주요 종목 다음 발표일")
+earnings_targets = {
+    "NVIDIA": "NVDA", "Microsoft": "MSFT", "Apple": "AAPL",
+    "Alphabet": "GOOGL", "Amazon": "AMZN", "Meta": "META",
+    "AMD": "AMD", "Broadcom": "AVGO", "TSMC": "TSM",
+    "삼성전자": "005930.KS", "SK하이닉스": "000660.KS",
+}
+earn_list = []
+today = datetime.now().date()
+for name, sym in earnings_targets.items():
+    ed = get_earnings_date(sym)
+    if ed is not None:
+        try:
+            if hasattr(ed, "date"):
+                ed = ed.date()
+            dday = (ed - today).days
+            if dday >= 0:
+                earn_list.append((name, sym, ed, dday))
+        except Exception:
+            pass
+
+if earn_list:
+    earn_list.sort(key=lambda x: x[3])
+    ecol1, ecol2 = st.columns(2)
+    half = (len(earn_list) + 1) // 2
+    for ci, group in enumerate([earn_list[:half], earn_list[half:]]):
+        target = ecol1 if ci == 0 else ecol2
+        with target:
+            for name, sym, ed, dday in group:
+                if dday <= 3:
+                    dcolor = "#e04858"; dbg = "rgba(224,72,88,0.12)"
+                elif dday <= 10:
+                    dcolor = "#f0a030"; dbg = "rgba(240,160,48,0.12)"
+                else:
+                    dcolor = "#4a8ef0"; dbg = "rgba(74,142,240,0.10)"
+                h = ('<div class="earn-row">'
+                     '<span class="earn-dday" style="color:' + dcolor + ';background:' + dbg + ';">D-' + str(dday) + '</span>'
+                     '<span class="earn-name">' + name + ' (' + sym + ')</span>'
+                     '<span class="earn-date">' + str(ed) + '</span>'
+                     '</div>')
+                st.markdown(h, unsafe_allow_html=True)
+    st.caption("Yahoo Finance 추정 발표일 · 변경될 수 있음 · D-3 이내 빨강 강조")
+else:
+    st.warning("실적 발표일 수집 실패 — 잠시 후 새로고침 (장 시간대에 따라 일부 누락 가능)")
+
+st.divider()
+
 st.subheader("📈 차트 — 주봉 / 월봉 + 추세 해석")
 chart_targets = {
     "S&P 500": "^GSPC", "나스닥": "^IXIC", "KOSPI": "^KS11",
@@ -477,4 +559,4 @@ with tab3:
             cols[i % 3].metric(name, "-")
 
 st.divider()
-st.caption("데이터: Yahoo Finance + FRED | 차트 주봉2년/월봉5년 · MA10/MA30")
+st.caption("데이터: Yahoo Finance + FRED | 실적일은 추정치 · 변경 가능")
