@@ -1,7 +1,7 @@
 import streamlit as st
 import yfinance as yf
 from fredapi import Fred
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import pytz
 import plotly.graph_objects as go
@@ -64,6 +64,12 @@ st.markdown("""
         min-width: 52px; padding: 3px 8px; border-radius: 4px; text-align: center; }
     .earn-name { font-size: 13px; color: #dce8f8; flex: 1; font-weight: 600; }
     .earn-date { font-family: monospace; font-size: 11px; color: #6a7d98; }
+    .kr-card {
+        background: #10151f; border: 1px solid #2a3d5a;
+        border-radius: 8px; padding: 14px 16px;
+    }
+    .kr-flow-label { font-family: monospace; font-size: 10px; color: #6a7d98; }
+    .kr-flow-val { font-size: 22px; font-weight: 700; }
     .stTabs [data-baseweb="tab"] { font-family: monospace; font-size: 12px; }
 </style>
 """, unsafe_allow_html=True)
@@ -156,6 +162,43 @@ def get_earnings_date(symbol):
     except Exception:
         return None
 
+@st.cache_data(ttl=1800)
+def get_korea_flow():
+    result = {"mode": None}
+    try:
+        from pykrx import stock
+        today = datetime.now()
+        for back in range(0, 6):
+            d = (today - timedelta(days=back)).strftime("%Y%m%d")
+            try:
+                df = stock.get_market_trading_value_by_investor(d, d, "KOSPI")
+                if df is not None and len(df) > 0 and "외국인" in df.index and "순매수" in df.columns:
+                    result["mode"] = "direct"
+                    result["date"] = d
+                    result["foreign"] = float(df.loc["외국인", "순매수"])
+                    if "기관합계" in df.index:
+                        result["inst"] = float(df.loc["기관합계", "순매수"])
+                    else:
+                        result["inst"] = None
+                    return result
+            except Exception:
+                continue
+    except Exception:
+        pass
+    result["mode"] = "indirect"
+    ewy, ewy_chg = get_yahoo("EWY")
+    krw, krw_chg = get_yahoo("KRW=X")
+    samsung, samsung_chg = get_yahoo("005930.KS")
+    result["ewy"] = (ewy, ewy_chg)
+    result["krw"] = (krw, krw_chg)
+    result["samsung"] = (samsung, samsung_chg)
+    score = 0
+    if ewy_chg is not None and ewy_chg > 0: score += 1
+    if krw_chg is not None and krw_chg < 0: score += 1
+    if samsung_chg is not None and samsung_chg > 0: score += 1
+    result["score"] = score
+    return result
+
 @st.cache_data(ttl=3600)
 def get_fred_latest(series_id):
     try:
@@ -238,7 +281,7 @@ kst = datetime.now(pytz.timezone("Asia/Seoul"))
 now_str = kst.strftime("%Y.%m.%d %H:%M")
 
 st.markdown("# IJ-HUB")
-st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | 야간선물+섹터+차트+실적")
+st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | 한국수급+실적+차트")
 
 overnight = get_overnight()
 if overnight:
@@ -347,6 +390,47 @@ if sector_rs:
     st.caption("강세 Top3: " + top_sectors + " | 11개 섹터 ETF 주간 비교")
 else:
     st.warning("섹터 데이터 수집 실패 — 잠시 후 새로고침")
+
+st.divider()
+
+st.subheader("🇰🇷 한국 수급 — 외국인 동향")
+kr = get_korea_flow()
+if kr["mode"] == "direct":
+    f = kr["foreign"]
+    f_eok = f / 1e8
+    fcol = "#1ecc7a" if f >= 0 else "#e04858"
+    kc1, kc2 = st.columns(2)
+    with kc1:
+        h = ('<div class="kr-card"><div class="kr-flow-label">외국인 순매수 (KOSPI, ' + kr["date"] + ')</div>'
+             '<div class="kr-flow-val" style="color:' + fcol + '">' + format(f_eok, "+,.0f") + ' 억원</div></div>')
+        st.markdown(h, unsafe_allow_html=True)
+    with kc2:
+        if kr.get("inst") is not None:
+            i_eok = kr["inst"] / 1e8
+            icol = "#1ecc7a" if kr["inst"] >= 0 else "#e04858"
+            h = ('<div class="kr-card"><div class="kr-flow-label">기관 순매수 (KOSPI)</div>'
+                 '<div class="kr-flow-val" style="color:' + icol + '">' + format(i_eok, "+,.0f") + ' 억원</div></div>')
+            st.markdown(h, unsafe_allow_html=True)
+    st.caption("KRX 직접 데이터 (pykrx) · 최근 영업일 기준")
+else:
+    score = kr.get("score", 0)
+    if score >= 2:
+        verdict, vcol = "외국인 유입 우호", "#1ecc7a"
+    elif score == 1:
+        verdict, vcol = "중립", "#f0a030"
+    else:
+        verdict, vcol = "외국인 이탈 압력", "#e04858"
+    h = ('<div class="kr-card"><div class="kr-flow-label">외국인 수급 환경 (간접 추정)</div>'
+         '<div class="kr-flow-val" style="color:' + vcol + '">' + verdict + '</div></div>')
+    st.markdown(h, unsafe_allow_html=True)
+    kc1, kc2, kc3 = st.columns(3)
+    ewy, ewy_chg = kr["ewy"]
+    krw, krw_chg = kr["krw"]
+    sam, sam_chg = kr["samsung"]
+    kc1.metric("EWY (한국ETF)", format(ewy, ".2f") if ewy else "-", format(ewy_chg, "+.2f") + "%" if ewy_chg is not None else "-")
+    kc2.metric("USD/KRW", format(krw, ",.0f") if krw else "-", format(krw_chg, "+.2f") + "%" if krw_chg is not None else "-")
+    kc3.metric("삼성전자", format(sam, ",.0f") if sam else "-", format(sam_chg, "+.2f") + "%" if sam_chg is not None else "-")
+    st.caption("KRX 직접 연결 실패 → 간접 추정 (EWY+환율+삼성전자) · 원화강세=유입 우호")
 
 st.divider()
 
@@ -468,7 +552,7 @@ if earn_list:
                 st.markdown(h, unsafe_allow_html=True)
     st.caption("Yahoo Finance 추정 발표일 · 변경될 수 있음 · D-3 이내 빨강 강조")
 else:
-    st.warning("실적 발표일 수집 실패 — 잠시 후 새로고침 (장 시간대에 따라 일부 누락 가능)")
+    st.warning("실적 발표일 수집 실패 — 잠시 후 새로고침")
 
 st.divider()
 
@@ -559,4 +643,4 @@ with tab3:
             cols[i % 3].metric(name, "-")
 
 st.divider()
-st.caption("데이터: Yahoo Finance + FRED | 실적일은 추정치 · 변경 가능")
+st.caption("데이터: Yahoo + FRED + KRX(pykrx) | 한국수급 직접/간접 자동전환")
