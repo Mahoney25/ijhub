@@ -10,69 +10,90 @@ st.set_page_config(page_title="IJ-HUB", layout="wide", page_icon="📊")
 
 st.markdown("""
 <style>
-    .stApp { background-color: #0a0d14; }
-    .main .block-container { padding-top: 2rem; max-width: 1200px; }
-    h1, h2, h3 { color: #dce8f8 !important; font-family: monospace; }
-    [data-testid="stMetricValue"] { font-family: monospace; font-size: 1.3rem; }
-    [data-testid="stMetricLabel"] { font-family: monospace; color: #6a7d98 !important; }
-    .judgment-box {
-        background: linear-gradient(135deg, #10151f, #141a26);
-        border: 1px solid #2a3d5a; border-left: 3px solid #1ecc7a;
-        border-radius: 8px; padding: 18px 22px; margin-bottom: 8px;
-    }
-    .judgment-box.warn { border-left-color: #f0a030; }
-    .judgment-box.danger { border-left-color: #e04858; }
-    .jb-label { font-family: monospace; font-size: 11px; letter-spacing: 0.1em;
-        text-transform: uppercase; color: #6a7d98; }
-    .jb-value { font-size: 26px; font-weight: 700; margin: 4px 0; }
-    .jb-sub { font-size: 13px; color: #aab8d0; }
-    .div-card {
-        background: #10151f; border: 1px solid #2a3d5a;
-        border-radius: 7px; padding: 12px 15px; margin-bottom: 8px;
-    }
-    .div-card.high { border-left: 3px solid #e04858; }
-    .div-card.mid { border-left: 3px solid #f0a030; }
-    .div-pair { font-family: monospace; font-size: 12px; font-weight: 700; color: #dce8f8; }
-    .div-desc { font-size: 12px; color: #aab8d0; margin-top: 4px; }
-    .div-imp { font-size: 11px; color: #f0a030; margin-top: 5px; }
-    .scen-box {
-        background: #10151f; border: 1px solid #2a3d5a;
-        border-radius: 8px; padding: 16px 18px; height: 100%;
-    }
-    .scen-box.bear { border-top: 2px solid #e04858; }
-    .scen-box.base { border-top: 2px solid #4a8ef0; }
-    .scen-box.bull { border-top: 2px solid #1ecc7a; }
-    .scen-label { font-family: monospace; font-size: 12px; font-weight: 700;
-        letter-spacing: 0.08em; margin-bottom: 8px; }
-    .scen-text { font-size: 12px; color: #aab8d0; line-height: 1.7; }
-    .sec-row {
-        display: flex; align-items: center; gap: 10px;
-        padding: 6px 0; border-bottom: 1px solid #1a2236;
-    }
-    .sec-rank { font-family: monospace; font-size: 11px; color: #6a7d98; width: 22px; }
-    .sec-name { font-size: 12px; color: #dce8f8; flex: 1; }
-    .sec-pct { font-family: monospace; font-size: 12px; font-weight: 600; width: 64px; text-align: right; }
-    .trend-box {
-        background: #10151f; border: 1px solid #2a3d5a; border-radius: 8px;
-        padding: 14px 16px; margin-top: 8px;
-    }
-    .earn-row {
-        display: flex; align-items: center; gap: 12px;
-        padding: 9px 12px; border-bottom: 1px solid #1a2236;
-    }
-    .earn-dday { font-family: monospace; font-size: 11px; font-weight: 700;
-        min-width: 52px; padding: 3px 8px; border-radius: 4px; text-align: center; }
-    .earn-name { font-size: 13px; color: #dce8f8; flex: 1; font-weight: 600; }
-    .earn-date { font-family: monospace; font-size: 11px; color: #6a7d98; }
-    .kr-card {
-        background: #10151f; border: 1px solid #2a3d5a;
-        border-radius: 8px; padding: 14px 16px;
-    }
-    .kr-flow-label { font-family: monospace; font-size: 10px; color: #6a7d98; }
-    .kr-flow-val { font-size: 22px; font-weight: 700; }
-    .stTabs [data-baseweb="tab"] { font-family: monospace; font-size: 12px; }
+.stApp { background-color: #0a0d14; }
+.main .block-container { padding-top: 2rem; max-width: 1200px; }
+h1, h2, h3 { color: #dce8f8 !important; font-family: monospace; }
+[data-testid="stMetricValue"] { font-family: monospace; font-size: 1.3rem; }
+[data-testid="stMetricLabel"] { font-family: monospace; color: #6a7d98 !important; }
+.judgment-box {
+    background: linear-gradient(135deg, #10151f, #141a26);
+    border: 1px solid #2a3d5a; border-left: 3px solid #1ecc7a;
+    border-radius: 8px; padding: 18px 22px; margin-bottom: 8px;
+}
+.judgment-box.warn { border-left-color: #f0a030; }
+.judgment-box.danger { border-left-color: #e04858; }
+.jb-label { font-family: monospace; font-size: 11px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #6a7d98; }
+.jb-value { font-size: 26px; font-weight: 700; margin: 4px 0; }
+.jb-sub { font-size: 13px; color: #aab8d0; }
+.div-card {
+    background: #10151f; border: 1px solid #2a3d5a;
+    border-radius: 7px; padding: 12px 15px; margin-bottom: 8px;
+}
+.div-card.high { border-left: 3px solid #e04858; }
+.div-card.mid { border-left: 3px solid #f0a030; }
+.div-pair { font-family: monospace; font-size: 12px; font-weight: 700; color: #dce8f8; }
+.div-desc { font-size: 12px; color: #aab8d0; margin-top: 4px; }
+.div-imp { font-size: 11px; color: #f0a030; margin-top: 5px; }
+.scen-box {
+    background: #10151f; border: 1px solid #2a3d5a;
+    border-radius: 8px; padding: 16px 18px; height: 100%;
+}
+.scen-box.bear { border-top: 2px solid #e04858; }
+.scen-box.base { border-top: 2px solid #4a8ef0; }
+.scen-box.bull { border-top: 2px solid #1ecc7a; }
+.scen-label { font-family: monospace; font-size: 12px; font-weight: 700;
+    letter-spacing: 0.08em; margin-bottom: 8px; }
+.scen-text { font-size: 12px; color: #aab8d0; line-height: 1.7; }
+.sec-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 0; border-bottom: 1px solid #1a2236;
+}
+.sec-rank { font-family: monospace; font-size: 11px; color: #6a7d98; width: 22px; }
+.sec-name { font-size: 12px; color: #dce8f8; flex: 1; }
+.sec-pct { font-family: monospace; font-size: 12px; font-weight: 600; width: 64px; text-align: right; }
+.trend-box {
+    background: #10151f; border: 1px solid #2a3d5a; border-radius: 8px;
+    padding: 14px 16px; margin-top: 8px;
+}
+.earn-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 9px 12px; border-bottom: 1px solid #1a2236;
+}
+.earn-dday { font-family: monospace; font-size: 11px; font-weight: 700;
+    min-width: 52px; padding: 3px 8px; border-radius: 4px; text-align: center; }
+.earn-name { font-size: 13px; color: #dce8f8; flex: 1; font-weight: 600; }
+.earn-date { font-family: monospace; font-size: 11px; color: #6a7d98; }
+.kr-card {
+    background: #10151f; border: 1px solid #2a3d5a;
+    border-radius: 8px; padding: 14px 16px;
+}
+.kr-flow-label { font-family: monospace; font-size: 10px; color: #6a7d98; }
+.kr-flow-val { font-size: 22px; font-weight: 700; }
+.stTabs [data-baseweb="tab"] { font-family: monospace; font-size: 12px; }
+
+/* Phase 0: 카드형 버튼을 judgment-box처럼 보이게 하는 오버라이드 */
+div[data-testid="stPopover"] > div > button {
+    background: linear-gradient(135deg, #10151f, #141a26) !important;
+    border: 1px solid #2a3d5a !important;
+    border-left: 3px solid #6a7d98 !important;
+    border-radius: 8px !important;
+    padding: 18px 22px !important;
+    width: 100% !important;
+    text-align: left !important;
+    height: auto !important;
+}
+div[data-testid="stPopover"] > div > button:hover {
+    border-color: #4a8ef0 !important;
+}
+div[data-testid="stPopover"] > div > button p {
+    font-family: monospace !important;
+    white-space: pre-line !important;
+    text-align: left !important;
+}
 </style>
 """, unsafe_allow_html=True)
+
 
 @st.cache_data(ttl=600)
 def get_yahoo(symbol):
@@ -85,6 +106,7 @@ def get_yahoo(symbol):
         return None, None
     except Exception:
         return None, None
+
 
 @st.cache_data(ttl=600)
 def get_yahoo_52w(symbol):
@@ -100,6 +122,7 @@ def get_yahoo_52w(symbol):
     except Exception:
         return None, None
 
+
 @st.cache_data(ttl=1800)
 def get_weekly_return(symbol):
     try:
@@ -111,6 +134,7 @@ def get_weekly_return(symbol):
         return None
     except Exception:
         return None
+
 
 @st.cache_data(ttl=300)
 def get_overnight():
@@ -125,6 +149,7 @@ def get_overnight():
             out.append((name, val, chg))
     return out
 
+
 @st.cache_data(ttl=1800)
 def get_ohlc(symbol, interval):
     try:
@@ -135,6 +160,7 @@ def get_ohlc(symbol, interval):
         return None
     except Exception:
         return None
+
 
 @st.cache_data(ttl=3600)
 def get_earnings_date(symbol):
@@ -162,6 +188,7 @@ def get_earnings_date(symbol):
     except Exception:
         return None
 
+
 @st.cache_data(ttl=1800)
 def get_korea_flow():
     result = {"mode": None}
@@ -185,6 +212,7 @@ def get_korea_flow():
                 continue
     except Exception:
         pass
+
     result["mode"] = "indirect"
     ewy, ewy_chg = get_yahoo("EWY")
     krw, krw_chg = get_yahoo("KRW=X")
@@ -199,6 +227,7 @@ def get_korea_flow():
     result["score"] = score
     return result
 
+
 @st.cache_data(ttl=3600)
 def get_fred_latest(series_id):
     try:
@@ -208,6 +237,7 @@ def get_fred_latest(series_id):
     except Exception:
         return None, None
 
+
 @st.cache_data(ttl=3600)
 def get_cpi_yoy():
     try:
@@ -216,6 +246,7 @@ def get_cpi_yoy():
         return (s.iloc[-1] / s.iloc[-13] - 1) * 100
     except Exception:
         return None
+
 
 @st.cache_data(ttl=1800)
 def compute_sector_rs():
@@ -233,6 +264,26 @@ def compute_sector_rs():
     results.sort(key=lambda x: x[2], reverse=True)
     return results
 
+
+# === Phase 0 신규: VIX 1년 히스토리 + percentile 계산 ===
+@st.cache_data(ttl=1800)
+def get_vix_history_1y():
+    try:
+        data = yf.Ticker("^VIX").history(period="1y")
+        if len(data) >= 30:
+            return data["Close"]
+        return None
+    except Exception:
+        return None
+
+
+def vix_percentile_1y(vix_series, current):
+    if vix_series is None or current is None:
+        return None
+    below = (vix_series < current).sum()
+    return below / len(vix_series) * 100
+
+
 def analyze_trend(data):
     close = data["Close"]
     ma_short = close.rolling(10).mean().iloc[-1]
@@ -245,6 +296,7 @@ def analyze_trend(data):
         msgs.append(("역배열", "#e04858", "현재가 < 단기MA < 장기MA — 하락 추세"))
     else:
         msgs.append(("혼조", "#f0a030", "이동평균 배열 혼재 — 방향성 불분명, 관망"))
+
     recent = (close.iloc[-1] - close.iloc[-5]) / close.iloc[-5] * 100 if len(close) >= 5 else 0
     if recent > 3:
         msgs.append(("모멘텀", "#1ecc7a", "최근 5봉 +" + format(recent, ".1f") + "% — 강한 상승 탄력"))
@@ -253,6 +305,7 @@ def analyze_trend(data):
     else:
         msgs.append(("모멘텀", "#6a7d98", "최근 5봉 " + format(recent, "+.1f") + "% — 횡보권"))
     return msgs
+
 
 def make_chart(data, title):
     fig = go.Figure(data=[go.Candlestick(
@@ -264,9 +317,9 @@ def make_chart(data, title):
     )])
     close = data["Close"]
     fig.add_trace(go.Scatter(x=data.index, y=close.rolling(10).mean(),
-        line=dict(color="#4a8ef0", width=1), name="MA10"))
+                              line=dict(color="#4a8ef0", width=1), name="MA10"))
     fig.add_trace(go.Scatter(x=data.index, y=close.rolling(30).mean(),
-        line=dict(color="#f0a030", width=1), name="MA30"))
+                              line=dict(color="#f0a030", width=1), name="MA30"))
     fig.update_layout(
         title=title, template="plotly_dark",
         paper_bgcolor="#0a0d14", plot_bgcolor="#0a0d14",
@@ -277,11 +330,34 @@ def make_chart(data, title):
     )
     return fig
 
+
+# === Phase 0 신규: VIX 1년 추이 미니차트 (popover 내부용) ===
+def make_vix_mini_chart(vix_series, current):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=vix_series.index, y=vix_series.values,
+        line=dict(color="#4a8ef0", width=1.5), name="VIX",
+        fill="tozeroy", fillcolor="rgba(74,142,240,0.08)",
+    ))
+    fig.add_hline(y=current, line_dash="dot", line_color="#f0a030",
+                   annotation_text="현재", annotation_font_color="#f0a030")
+    fig.add_hline(y=18, line_dash="dash", line_color="#1ecc7a", opacity=0.4)
+    fig.add_hline(y=25, line_dash="dash", line_color="#e04858", opacity=0.4)
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#0a0d14", plot_bgcolor="#0a0d14",
+        height=220, margin=dict(l=10, r=10, t=10, b=10),
+        font=dict(family="monospace", size=10, color="#aab8d0"),
+        showlegend=False,
+    )
+    return fig
+
+
 kst = datetime.now(pytz.timezone("Asia/Seoul"))
 now_str = kst.strftime("%Y.%m.%d %H:%M")
 
 st.markdown("# IJ-HUB")
-st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | 한국수급+실적+차트")
+st.caption("투자 판단 인텔리전스 허브 | " + now_str + " KST | 한국수급+실적+차트 [PHASE 0 TEST]")
 
 overnight = get_overnight()
 if overnight:
@@ -305,14 +381,15 @@ hy, hy_chg = get_fred_latest("BAMLH0A0HYM2")
 y10, _ = get_fred_latest("DGS10")
 y2, _ = get_fred_latest("DGS2")
 cpi = get_cpi_yoy()
-
 sector_rs = compute_sector_rs()
+
 if sector_rs:
     top_sectors = " · ".join([s[0] for s in sector_rs[:3]])
     strong_sector = sector_rs[0][0]
 else:
     top_sectors = "데이터 수집 실패"
     strong_sector = "주요 섹터"
+
 
 def judge_regime(vix, hy):
     score = 0
@@ -338,6 +415,7 @@ def judge_regime(vix, hy):
     else:
         return "중립", "warn", " / ".join(reasons), score
 
+
 regime, level, reason, regime_score = judge_regime(vix, hy)
 if level == "ok":
     box_class, regime_color = "judgment-box", "#1ecc7a"
@@ -349,6 +427,7 @@ else:
 spx_str = format(spx, ",.0f") if spx is not None else "-"
 spx_sub = format(spx_chg, "+.2f") + "%" if spx_chg is not None else "-"
 spx_col = "#1ecc7a" if (spx_chg or 0) >= 0 else "#e04858"
+
 vix_str = format(vix, ".1f") if vix is not None else "-"
 vix_sub = format(vix_chg, "+.2f") + "%" if vix_chg is not None else "-"
 vix_col = "#1ecc7a" if (vix is not None and vix < 18) else "#f0a030"
@@ -365,10 +444,35 @@ with c2:
          '<div class="jb-sub">' + spx_sub + '</div></div>')
     st.markdown(h, unsafe_allow_html=True)
 with c3:
-    h = ('<div class="judgment-box"><div class="jb-label">VIX 변동성</div>'
-         '<div class="jb-value" style="color:' + vix_col + '">' + vix_str + '</div>'
-         '<div class="jb-sub">' + vix_sub + '</div></div>')
-    st.markdown(h, unsafe_allow_html=True)
+    # ============================================================
+    # Phase 0 핵심 변경 구간: VIX 카드를 HTML div → popover로 교체
+    # ============================================================
+    vix_btn_label = "VIX 변동성\n\n" + vix_str + "\n\n" + vix_sub
+    with st.popover(vix_btn_label, use_container_width=True):
+        st.markdown("**VIX (CBOE 변동성지수) — 상세**")
+        st.caption("S&P500 옵션 내재변동성 기준 30일 예상 변동폭 지수. 통상 18 이하=안정, 25 이상=경계.")
+
+        vix_hist = get_vix_history_1y()
+        pct_1y = vix_percentile_1y(vix_hist, vix) if vix_hist is not None else None
+
+        mcol1, mcol2 = st.columns(2)
+        with mcol1:
+            st.metric("현재가", vix_str, vix_sub)
+        with mcol2:
+            if pct_1y is not None:
+                st.metric("1년 percentile", format(pct_1y, ".0f") + "%ile")
+            else:
+                st.metric("1년 percentile", "-")
+
+        if vix_hist is not None:
+            st.plotly_chart(make_vix_mini_chart(vix_hist, vix), use_container_width=True)
+            st.caption("점선: 현재값 / 녹색선 18(안정 기준) / 적색선 25(경계 기준)")
+        else:
+            st.warning("1년 히스토리 로드 실패")
+
+        st.markdown("---")
+        st.caption("Fact ★5: 실시간 시세 기준 / 해석: 18 미만은 시장 컨센서스 안정 구간 (룰 기반, ★4) "
+                    "/ 의견: percentile이 낮을수록(시장이 평온할수록) 역설적으로 예상치 못한 충격에 더 취약할 수 있음 (메커니즘 가설, ★3)")
 
 st.divider()
 
@@ -439,24 +543,24 @@ divergences = []
 if vix is not None and spx_52w is not None:
     if vix < 16 and spx_52w > 85:
         divergences.append(("high", "VIX 저점 ↔ 주가 고점권",
-            "VIX " + format(vix, ".1f") + " (매우 낮음) + S&P 52주 " + format(spx_52w, ".0f") + "%ile (고점 부근)",
-            "과도한 안도감 신호. 작은 악재에도 변동성 급등 가능."))
+                             "VIX " + format(vix, ".1f") + " (매우 낮음) + S&P 52주 " + format(spx_52w, ".0f") + "%ile (고점 부근)",
+                             "과도한 안도감 신호. 작은 악재에도 변동성 급등 가능."))
 if y10 is not None and y2 is not None and spx_52w is not None:
     spread = (y10 - y2) * 100
     if spread < 0 and spx_52w > 75:
         divergences.append(("mid", "금리 역전 ↔ 주가 강세",
-            "2s10s " + format(spread, ".0f") + "bp 역전 (침체 선행) + S&P 52주 " + format(spx_52w, ".0f") + "%ile",
-            "채권시장은 침체 경고, 주식시장은 낙관. 역사적으로 채권이 먼저 맞은 경우 많음."))
+                             "2s10s " + format(spread, ".0f") + "bp 역전 (침체 선행) + S&P 52주 " + format(spx_52w, ".0f") + "%ile",
+                             "채권시장은 침체 경고, 주식시장은 낙관. 역사적으로 채권이 먼저 맞은 경우 많음."))
 if cpi is not None and hy is not None:
     if cpi > 3.0 and hy < 3.5:
         divergences.append(("mid", "인플레 잔존 ↔ 신용 안일",
-            "CPI " + format(cpi, ".1f") + "% (목표 상회) + HY스프레드 " + format(hy, ".2f") + "% (매우 타이트)",
-            "물가 부담 남았는데 신용시장은 무위험 인식. 재반등 시 스프레드 급확대 위험."))
+                             "CPI " + format(cpi, ".1f") + "% (목표 상회) + HY스프레드 " + format(hy, ".2f") + "% (매우 타이트)",
+                             "물가 부담 남았는데 신용시장은 무위험 인식. 재반등 시 스프레드 급확대 위험."))
 if vix is not None and hy is not None:
     if vix < 18 and hy > 4.5:
         divergences.append(("high", "주식 평온 ↔ 신용 경고",
-            "VIX " + format(vix, ".1f") + " (낮음) + HY스프레드 " + format(hy, ".2f") + "% (확대 중)",
-            "주식은 평온한데 신용시장에 스트레스. 신용이 보통 선행 — 주의."))
+                             "VIX " + format(vix, ".1f") + " (낮음) + HY스프레드 " + format(hy, ".2f") + "% (확대 중)",
+                             "주식은 평온한데 신용시장에 스트레스. 신용이 보통 선행 — 주의."))
 
 if divergences:
     for sev, pair, desc, imp in divergences:
@@ -477,19 +581,17 @@ cpi_txt = format(cpi, ".1f") + "%" if cpi else "-"
 hy_txt = format(hy, ".2f") + "%" if hy else "-"
 
 bear_text = ("현 국면 [" + regime + "]에도 발산 " + str(div_count) + "건 감지. "
-    "신용스프레드(" + hy_txt + ") 확대 전환 또는 CPI(" + cpi_txt + ") 재반등 시 "
-    "위험자산 동시 조정 가능. 2s10s(" + spread_txt + ") 추가 역전은 침체 우려 자극. "
-    "현 강세 섹터(" + strong_sector + ")도 변동성 국면 전환 시 차익실현 압력.")
-
+             "신용스프레드(" + hy_txt + ") 확대 전환 또는 CPI(" + cpi_txt + ") 재반등 시 "
+             "위험자산 동시 조정 가능. 2s10s(" + spread_txt + ") 추가 역전은 침체 우려 자극. "
+             "현 강세 섹터(" + strong_sector + ")도 변동성 국면 전환 시 차익실현 압력.")
 base_text = ("국면 점수 " + str(regime_score) + " 기준 현 추세 유지가 기본선. "
-    "신용 건전(" + hy_txt + ") + VIX 안정 시 " + strong_sector + " 주도 지속. "
-    "발산 신호는 잠재 리스크로 두되, 트리거 부재 시 급변 가능성 낮음. "
-    "이벤트(CPI·FOMC) 전후 관망 권장.")
-
+             "신용 건전(" + hy_txt + ") + VIX 안정 시 " + strong_sector + " 주도 지속. "
+             "발산 신호는 잠재 리스크로 두되, 트리거 부재 시 급변 가능성 낮음. "
+             "이벤트(CPI·FOMC) 전후 관망 권장.")
 bull_text = ("신용 추가 타이트 + VIX 추가 하락 시 위험선호 강화. "
-    "CPI(" + cpi_txt + ") 둔화 지속 + 금리 하락 전환 시 성장주 밸류 재평가. "
-    + strong_sector + " 모멘텀 가속이 추가 상승 견인 가능. "
-    "단, 현 발산 신호가 상단 제한 가능 — 과열 경계.")
+             "CPI(" + cpi_txt + ") 둔화 지속 + 금리 하락 전환 시 성장주 밸류 재평가. "
+             + strong_sector + " 모멘텀 가속이 추가 상승 견인 가능. "
+             "단, 현 발산 신호가 상단 제한 가능 — 과열 경계.")
 
 sc1, sc2, sc3 = st.columns(3)
 with sc1:
@@ -504,7 +606,6 @@ with sc3:
     h = ('<div class="scen-box bull"><div class="scen-label" style="color:#1ecc7a">▲ BULL</div>'
          '<div class="scen-text">' + bull_text + '</div></div>')
     st.markdown(h, unsafe_allow_html=True)
-
 st.caption("규칙 기반 자동 생성 · 강세 섹터 실시간 반영 · Bear 우선")
 
 st.divider()
@@ -569,7 +670,6 @@ with ccol2:
 
 interval = "1wk" if tf == "주봉" else "1mo"
 ohlc = get_ohlc(chart_targets[sel_name], interval)
-
 if ohlc is not None:
     st.plotly_chart(make_chart(ohlc, sel_name + " (" + tf + ")"), use_container_width=True)
     trend_msgs = analyze_trend(ohlc)
@@ -619,6 +719,7 @@ with tab2:
         else:
             cols[idx % 3].metric(name, "-")
         idx += 1
+
     if y10 is not None and y2 is not None:
         spread = (y10 - y2) * 100
         st.divider()
