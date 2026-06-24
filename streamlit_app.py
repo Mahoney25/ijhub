@@ -307,11 +307,16 @@ def get_vix_history_1y():
         return None
 
 
-def vix_percentile_1y(vix_series, current):
-    if vix_series is None or current is None:
+def percentile_1y(series, current):
+    if series is None or current is None or len(series) == 0:
         return None
-    below = (vix_series < current).sum()
-    return below / len(vix_series) * 100
+    below = (series < current).sum()
+    return below / len(series) * 100
+
+
+# 하위호환 별칭
+def vix_percentile_1y(vix_series, current):
+    return percentile_1y(vix_series, current)
 
 
 def analyze_trend(data):
@@ -361,18 +366,26 @@ def make_chart(data, title):
     return fig
 
 
-# === Phase 0 신규: VIX 1년 추이 미니차트 (popover 내부용) ===
-def make_vix_mini_chart(vix_series, current):
+# === Phase 0/1: 범용 1년 추이 미니차트 (popover 내부용) ===
+def make_mini_chart(series, current, line_color="#4a8ef0",
+                     band_low=None, band_high=None, invert_bands=False):
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=vix_series.index, y=vix_series.values,
-        line=dict(color="#4a8ef0", width=1.5), name="VIX",
+        x=series.index, y=series.values,
+        line=dict(color=line_color, width=1.5), name="값",
         fill="tozeroy", fillcolor="rgba(74,142,240,0.08)",
     ))
-    fig.add_hline(y=current, line_dash="dot", line_color="#f0a030",
-                   annotation_text="현재", annotation_font_color="#f0a030")
-    fig.add_hline(y=18, line_dash="dash", line_color="#1ecc7a", opacity=0.4)
-    fig.add_hline(y=25, line_dash="dash", line_color="#e04858", opacity=0.4)
+    if current is not None:
+        fig.add_hline(y=current, line_dash="dot", line_color="#f0a030",
+                       annotation_text="현재", annotation_font_color="#f0a030")
+    # band_low = 안정 기준선(보통 녹색), band_high = 경계 기준선(보통 적색)
+    # invert_bands=True면 낮을수록 위험(예: 신용스프레드는 반대로 높을수록 위험이라 기본 False)
+    low_color = "#e04858" if invert_bands else "#1ecc7a"
+    high_color = "#1ecc7a" if invert_bands else "#e04858"
+    if band_low is not None:
+        fig.add_hline(y=band_low, line_dash="dash", line_color=low_color, opacity=0.4)
+    if band_high is not None:
+        fig.add_hline(y=band_high, line_dash="dash", line_color=high_color, opacity=0.4)
     fig.update_layout(
         template="plotly_dark",
         paper_bgcolor="#0a0d14", plot_bgcolor="#0a0d14",
@@ -381,6 +394,79 @@ def make_vix_mini_chart(vix_series, current):
         showlegend=False,
     )
     return fig
+
+
+# 하위호환 별칭
+def make_vix_mini_chart(vix_series, current):
+    return make_mini_chart(vix_series, current, band_low=18, band_high=25)
+
+
+@st.cache_data(ttl=3600)
+def get_fred_history_1y(series_id):
+    try:
+        fred = Fred(api_key=st.secrets["FRED_API_KEY"])
+        s = fred.get_series(series_id).dropna()
+        cutoff = pd.Timestamp.now() - pd.Timedelta(days=400)
+        return s[s.index >= cutoff]
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=1800)
+def get_yahoo_history_1y(symbol):
+    try:
+        data = yf.Ticker(symbol).history(period="1y")
+        if len(data) >= 30:
+            return data["Close"]
+        return None
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=1800)
+def get_korea_foreign_flow_series(days=20):
+    """최근 N영업일 KOSPI 외국인 순매수 추이 (pykrx 직접 데이터만 해당)"""
+    try:
+        from pykrx import stock
+        today = datetime.now()
+        start = (today - timedelta(days=days + 15)).strftime("%Y%m%d")
+        end = today.strftime("%Y%m%d")
+        df = stock.get_market_trading_value_by_date(start, end, "KOSPI", on="순매수")
+        if df is not None and len(df) > 0 and "외국인합계" in df.columns:
+            s = df["외국인합계"].tail(days)
+            return s
+        return None
+    except Exception:
+        return None
+
+
+def _normalize_index(series):
+    """tz-aware/naive 혼용 문제를 막기 위해 날짜만 남기고 인덱스 정규화"""
+    s = series.copy()
+    try:
+        if s.index.tz is not None:
+            s.index = s.index.tz_localize(None)
+    except (AttributeError, TypeError):
+        pass
+    s.index = pd.to_datetime(s.index).normalize()
+    return s
+
+
+def compute_correlation(series_a, series_b, window=None):
+    """두 시리즈를 날짜 기준 정렬 후 상관계수 계산. window 지정 시 최근 window일만 사용."""
+    if series_a is None or series_b is None:
+        return None
+    try:
+        a = _normalize_index(series_a)
+        b = _normalize_index(series_b)
+        df = pd.DataFrame({"a": a, "b": b}).dropna()
+        if window is not None:
+            df = df.tail(window)
+        if len(df) < 5:
+            return None
+        return df["a"].corr(df["b"])
+    except Exception:
+        return None
 
 
 kst = datetime.now(pytz.timezone("Asia/Seoul"))
@@ -464,15 +550,83 @@ vix_col = "#1ecc7a" if (vix is not None and vix < 18) else "#f0a030"
 
 c1, c2, c3 = st.columns([2, 1, 1])
 with c1:
-    h = ('<div class="' + box_class + '"><div class="jb-label">시장 국면 판단</div>'
-         '<div class="jb-value" style="color:' + regime_color + '">' + regime + '</div>'
-         '<div class="jb-sub">' + reason + '</div></div>')
-    st.markdown(h, unsafe_allow_html=True)
+    # ============================================================
+    # Phase 1: 시장국면판단 카드를 popover로 교체
+    # HY스프레드 상세는 여기 안에서만 노출 (별도 메인 카드 없음)
+    # ============================================================
+    regime_btn_label = "시장 국면 판단\n\n" + regime + "\n\n" + reason
+    with st.popover(regime_btn_label, use_container_width=True):
+        st.markdown("**국면 판단 — 산출 로직**")
+        st.caption("VIX + HY 신용스프레드 2개 지표 룰 기반 점수화. "
+                    "각 +1(안정)/0(중립)/-1(경계) → 합산 2점 이상 Risk-On, -1 이하 Risk-Off.")
+
+        st.markdown("---")
+        st.markdown("**① VIX 기여**")
+        vcol1, vcol2 = st.columns(2)
+        with vcol1:
+            st.metric("현재", vix_str, vix_sub)
+        with vcol2:
+            vix_score_txt = "+1 (안정)" if (vix is not None and vix < 18) else (
+                "-1 (경계)" if (vix is not None and vix > 25) else "0 (중립)")
+            st.metric("점수 기여", vix_score_txt)
+
+        st.markdown("**② HY 신용스프레드 기여**")
+        hy_hist = get_fred_history_1y("BAMLH0A0HYM2")
+        hy_pct = percentile_1y(hy_hist, hy) if hy_hist is not None else None
+        hcol1, hcol2 = st.columns(2)
+        with hcol1:
+            st.metric("현재", format(hy, ".2f") + "%" if hy is not None else "-",
+                       format(hy_chg, "+.2f") if hy_chg is not None else None)
+        with hcol2:
+            hy_score_txt = "+1 (타이트)" if (hy is not None and hy < 3.5) else (
+                "-1 (확대)" if (hy is not None and hy > 5.0) else "0 (보통)")
+            st.metric("점수 기여", hy_score_txt)
+
+        if hy_hist is not None:
+            st.plotly_chart(
+                make_mini_chart(hy_hist, hy, band_low=3.5, band_high=5.0, invert_bands=True),
+                use_container_width=True
+            )
+            if hy_pct is not None:
+                st.caption("1년 percentile: " + format(hy_pct, ".0f") + "%ile "
+                           "(점선=현재 / 녹색선 3.5%=타이트 기준 / 적색선 5.0%=확대 경계)")
+        else:
+            st.warning("HY스프레드 히스토리 로드 실패 (FRED API)")
+
+        st.markdown("---")
+        st.markdown("**종합 점수: " + str(regime_score) + "**")
+        st.caption("Fact ★5: VIX·HY 실시간 시세 / 해석 ★4: 룰 기반 점수화(사전 정의 임계값) "
+                   "/ 의견 ★3: 2개 지표만으로는 신용+변동성 측면만 포착 — 유동성·밸류에이션 지표 미반영 한계 있음")
+
 with c2:
-    h = ('<div class="judgment-box"><div class="jb-label">S&P 500</div>'
-         '<div class="jb-value" style="color:' + spx_col + '">' + spx_str + '</div>'
-         '<div class="jb-sub">' + spx_sub + '</div></div>')
-    st.markdown(h, unsafe_allow_html=True)
+    # ============================================================
+    # Phase 1: S&P500 카드를 popover로 교체
+    # ============================================================
+    spx_btn_label = "S&P 500\n\n" + spx_str + "\n\n" + spx_sub
+    with st.popover(spx_btn_label, use_container_width=True):
+        st.markdown("**S&P 500 — 상세**")
+        spx_hist = get_yahoo_history_1y("^GSPC")
+
+        mcol1, mcol2 = st.columns(2)
+        with mcol1:
+            st.metric("현재가", spx_str, spx_sub)
+        with mcol2:
+            if spx_52w is not None:
+                st.metric("52주 percentile", format(spx_52w, ".0f") + "%ile")
+            else:
+                st.metric("52주 percentile", "-")
+
+        if spx_hist is not None:
+            st.plotly_chart(make_mini_chart(spx_hist, spx), use_container_width=True)
+            st.caption("점선: 현재가 (1년 가격 추이, 기준선 없음)")
+        else:
+            st.warning("1년 히스토리 로드 실패")
+
+        st.markdown("---")
+        st.caption("Fact ★5: 실시간 시세 기준 / 해석 ★4: 52주 percentile 85%ile 이상은 "
+                   "통상 과열 구간으로 분류 / 의견 ★3: percentile만으로 추세 지속 여부 판단 불가 — "
+                   "밸류에이션·실적 모멘텀 병행 확인 필요")
+
 with c3:
     # ============================================================
     # Phase 0 핵심 변경 구간: VIX 카드를 HTML div → popover로 교체
@@ -529,15 +683,58 @@ st.divider()
 
 st.subheader("🇰🇷 한국 수급 — 외국인 동향")
 kr = get_korea_flow()
+
+# 삼성전자 1년 가격 시리즈 (상관관계 계산용, 두 모드 공통 사용)
+samsung_hist = get_yahoo_history_1y("005930.KS")
+
 if kr["mode"] == "direct":
     f = kr["foreign"]
     f_eok = f / 1e8
     fcol = "#1ecc7a" if f >= 0 else "#e04858"
     kc1, kc2 = st.columns(2)
     with kc1:
-        h = ('<div class="kr-card"><div class="kr-flow-label">외국인 순매수 (KOSPI, ' + kr["date"] + ')</div>'
-             '<div class="kr-flow-val" style="color:' + fcol + '">' + format(f_eok, "+,.0f") + ' 억원</div></div>')
-        st.markdown(h, unsafe_allow_html=True)
+        # ============================================================
+        # Phase 1: 외국인 순매수 카드를 popover로 교체
+        # ============================================================
+        flow_btn_label = "외국인 순매수 (KOSPI, " + kr["date"] + ")\n\n" + format(f_eok, "+,.0f") + " 억원"
+        with st.popover(flow_btn_label, use_container_width=True):
+            st.markdown("**외국인 순매수 ↔ 삼성전자 가격 — 동행성**")
+
+            flow_series = get_korea_foreign_flow_series(20)
+            if flow_series is not None and samsung_hist is not None:
+                corr = compute_correlation(flow_series, samsung_hist, window=20)
+            else:
+                corr = None
+
+            if corr is not None:
+                st.metric("최근 20영업일 상관계수", format(corr, "+.2f"))
+            else:
+                st.metric("최근 20영업일 상관계수", "-")
+                st.caption("데이터 부족으로 계산 불가")
+
+            if flow_series is not None:
+                fig = go.Figure()
+                colors = ["#1ecc7a" if v >= 0 else "#e04858" for v in flow_series.values]
+                fig.add_trace(go.Bar(x=flow_series.index, y=flow_series.values / 1e8,
+                                      marker_color=colors, name="외국인 순매수(억원)"))
+                fig.update_layout(
+                    template="plotly_dark", paper_bgcolor="#0a0d14", plot_bgcolor="#0a0d14",
+                    height=200, margin=dict(l=10, r=10, t=10, b=10),
+                    font=dict(family="monospace", size=10, color="#aab8d0"), showlegend=False,
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption("최근 20영업일 KOSPI 외국인 순매수(억원)")
+            else:
+                st.warning("외국인 순매수 추이 로드 실패")
+
+            st.markdown("---")
+            st.caption(
+                "Fact ★5: 상관계수는 위 표시 기간 실데이터 계산값 / "
+                "의견 ★4(이론상 메커니즘 가설, 확인된 보도 아님): 외국인 수급은 패시브(EWY 등) 추종 및 "
+                "삼성전자 시총 비중이 커서 지수 영향력이 높아 동행성이 구조적으로 형성되는 경향 — "
+                "단, 상관관계가 곧 인과를 증명하지는 않으며 역(逆)으로 삼성전자 강세가 외국인 추가 매수를 유인할 수도 있음(쌍방향 가능성)"
+            )
+        st.caption("KRX 직접 데이터 (pykrx) · 최근 영업일 기준")
     with kc2:
         if kr.get("inst") is not None:
             i_eok = kr["inst"] / 1e8
@@ -545,7 +742,6 @@ if kr["mode"] == "direct":
             h = ('<div class="kr-card"><div class="kr-flow-label">기관 순매수 (KOSPI)</div>'
                  '<div class="kr-flow-val" style="color:' + icol + '">' + format(i_eok, "+,.0f") + ' 억원</div></div>')
             st.markdown(h, unsafe_allow_html=True)
-    st.caption("KRX 직접 데이터 (pykrx) · 최근 영업일 기준")
 else:
     score = kr.get("score", 0)
     if score >= 2:
@@ -554,9 +750,33 @@ else:
         verdict, vcol = "중립", "#f0a030"
     else:
         verdict, vcol = "외국인 이탈 압력", "#e04858"
-    h = ('<div class="kr-card"><div class="kr-flow-label">외국인 수급 환경 (간접 추정)</div>'
-         '<div class="kr-flow-val" style="color:' + vcol + '">' + verdict + '</div></div>')
-    st.markdown(h, unsafe_allow_html=True)
+
+    # ============================================================
+    # Phase 1: 외국인 수급환경(간접추정) 카드를 popover로 교체
+    # ============================================================
+    flow_btn_label = "외국인 수급 환경 (간접 추정)\n\n" + verdict
+    with st.popover(flow_btn_label, use_container_width=True):
+        st.markdown("**EWY/USD-KRW/삼성전자 간접 추정 ↔ 동행성**")
+        st.caption("KRX 직접 연결 실패로 EWY(한국ETF)·환율·삼성전자 3개 신호의 합성 점수 사용 중")
+
+        ewy_hist = get_yahoo_history_1y("EWY")
+        if ewy_hist is not None and samsung_hist is not None:
+            corr_ewy_sam = compute_correlation(ewy_hist, samsung_hist, window=60)
+        else:
+            corr_ewy_sam = None
+
+        if corr_ewy_sam is not None:
+            st.metric("EWY ↔ 삼성전자 60일 상관계수", format(corr_ewy_sam, "+.2f"))
+        else:
+            st.metric("EWY ↔ 삼성전자 60일 상관계수", "-")
+
+        st.markdown("---")
+        st.caption(
+            "Fact ★5: 상관계수는 실데이터 계산값 / "
+            "의견 ★4(이론상 메커니즘 가설, 확인된 보도 아님): EWY는 삼성전자가 지수 내 최대 비중을 차지해 "
+            "구조적으로 높은 상관을 보이는 경향 — 이 합성 점수는 KRX 직접 수급 데이터의 대리(proxy)일 뿐 "
+            "실제 외국인 매매 의도를 직접 반영하지는 않음(간접 추정의 한계)"
+        )
     kc1, kc2, kc3 = st.columns(3)
     ewy, ewy_chg = kr["ewy"]
     krw, krw_chg = kr["krw"]
