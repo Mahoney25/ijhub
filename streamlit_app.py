@@ -72,7 +72,7 @@ h1, h2, h3 { color: #dce8f8 !important; font-family: monospace; }
 .kr-flow-val { font-size: 22px; font-weight: 700; }
 .stTabs [data-baseweb="tab"] { font-family: monospace; font-size: 12px; }
 
-/* Phase 0: 카드형 버튼을 judgment-box처럼 보이게 하는 오버라이드 */
+/* Phase 0: 카드형 버튼을 judgment-box와 동일한 치수/타이포로 맞춤 */
 div[data-testid="stPopover"] > div > button {
     background: linear-gradient(135deg, #10151f, #141a26) !important;
     border: 1px solid #2a3d5a !important;
@@ -82,25 +82,44 @@ div[data-testid="stPopover"] > div > button {
     width: 100% !important;
     text-align: left !important;
     height: auto !important;
+    min-height: 0 !important;
+    display: block !important;
+    line-height: 1.3 !important;
 }
 div[data-testid="stPopover"] > div > button:hover {
     border-color: #4a8ef0 !important;
-}
-div[data-testid="stPopover"] > div > button p {
-    font-family: monospace !important;
-    white-space: pre-line !important;
-    text-align: left !important;
-    color: #dce8f8 !important;
-}
-div[data-testid="stPopover"] > div > button:focus p,
-div[data-testid="stPopover"] > div > button:active p,
-div[data-testid="stPopover"] > div > button:hover p {
-    color: #dce8f8 !important;
 }
 div[data-testid="stPopover"] > div > button:focus,
 div[data-testid="stPopover"] > div > button:active {
     background: linear-gradient(135deg, #10151f, #141a26) !important;
     border-left: 3px solid #4a8ef0 !important;
+}
+div[data-testid="stPopover"] > div > button div[data-testid="stMarkdownContainer"] p {
+    font-family: monospace !important;
+    text-align: left !important;
+    color: #dce8f8 !important;
+    margin: 0 !important;
+    white-space: normal !important;
+}
+/* 1줄: jb-label과 동일 (11px, 회색, uppercase 트래킹) */
+div[data-testid="stPopover"] > div > button div[data-testid="stMarkdownContainer"] p:nth-of-type(1) {
+    font-size: 11px !important;
+    letter-spacing: 0.1em !important;
+    color: #6a7d98 !important;
+    text-transform: uppercase !important;
+    margin-bottom: 4px !important;
+}
+/* 2줄: jb-value와 동일 (26px, bold) */
+div[data-testid="stPopover"] > div > button div[data-testid="stMarkdownContainer"] p:nth-of-type(2) {
+    font-size: 26px !important;
+    font-weight: 700 !important;
+    margin: 4px 0 !important;
+    color: #dce8f8 !important;
+}
+/* 3줄: jb-sub와 동일 (13px, 옅은 회색) */
+div[data-testid="stPopover"] > div > button div[data-testid="stMarkdownContainer"] p:nth-of-type(3) {
+    font-size: 13px !important;
+    color: #aab8d0 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -458,7 +477,7 @@ with c3:
     # ============================================================
     # Phase 0 핵심 변경 구간: VIX 카드를 HTML div → popover로 교체
     # ============================================================
-    vix_btn_label = "VIX 변동성  \n**" + vix_str + "**  \n" + vix_sub
+    vix_btn_label = "VIX 변동성\n\n" + vix_str + "\n\n" + vix_sub
     with st.popover(vix_btn_label, use_container_width=True):
         st.markdown("**VIX (CBOE 변동성지수) — 상세**")
         st.caption("S&P500 옵션 내재변동성 기준 30일 예상 변동폭 지수. 통상 18 이하=안정, 25 이상=경계.")
