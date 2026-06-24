@@ -90,6 +90,17 @@ div[data-testid="stPopover"] > div > button p {
     font-family: monospace !important;
     white-space: pre-line !important;
     text-align: left !important;
+    color: #dce8f8 !important;
+}
+div[data-testid="stPopover"] > div > button:focus p,
+div[data-testid="stPopover"] > div > button:active p,
+div[data-testid="stPopover"] > div > button:hover p {
+    color: #dce8f8 !important;
+}
+div[data-testid="stPopover"] > div > button:focus,
+div[data-testid="stPopover"] > div > button:active {
+    background: linear-gradient(135deg, #10151f, #141a26) !important;
+    border-left: 3px solid #4a8ef0 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -447,7 +458,7 @@ with c3:
     # ============================================================
     # Phase 0 핵심 변경 구간: VIX 카드를 HTML div → popover로 교체
     # ============================================================
-    vix_btn_label = "VIX 변동성\n\n" + vix_str + "\n\n" + vix_sub
+    vix_btn_label = "VIX 변동성  \n**" + vix_str + "**  \n" + vix_sub
     with st.popover(vix_btn_label, use_container_width=True):
         st.markdown("**VIX (CBOE 변동성지수) — 상세**")
         st.caption("S&P500 옵션 내재변동성 기준 30일 예상 변동폭 지수. 통상 18 이하=안정, 25 이상=경계.")
