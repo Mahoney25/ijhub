@@ -512,16 +512,21 @@ def get_yahoo_history_long(symbol, days=500):
         return None
 
 
-# 6개 핵심 페어 정의: (표시명, A시리즈 로더, B시리즈 로더, 메커니즘 가설, 신뢰도)
-def _spread_2s10s_long():
-    y10s = get_fred_history_long("DGS10")
-    y2s = get_fred_history_long("DGS2")
-    if y10s is None or y2s is None:
+# 5개 핵심 페어 정의: (표시명, A시리즈 로더, B시리즈 로더, 메커니즘 가설, 시황신호 해석)
+def _strong_sector_etf_history():
+    """현재 섹터RS 1위 ETF의 가격 히스토리 (compute_sector_rs 결과 재사용)"""
+    rs = compute_sector_rs()
+    if not rs:
         return None
-    a = _normalize_index(y10s)
-    b = _normalize_index(y2s)
-    df = pd.DataFrame({"a": a, "b": b}).dropna()
-    return (df["a"] - df["b"]) * 100  # bp
+    top_ticker = rs[0][1]
+    return get_yahoo_history_long(top_ticker)
+
+
+def _strong_sector_label():
+    rs = compute_sector_rs()
+    if not rs:
+        return "강세섹터"
+    return rs[0][0] + "(" + rs[0][1] + ")"
 
 
 CORRELATION_PAIRS = {
@@ -529,9 +534,14 @@ CORRELATION_PAIRS = {
         "loader_a": lambda: get_yahoo_history_long("^VIX"),
         "loader_b": lambda: get_yahoo_history_long("^GSPC"),
         "label_a": "VIX", "label_b": "S&P500",
-        "expected_sign": "음(-)",
+        "expected_sign": "음(-), 평소 강함",
         "mechanism": "VIX는 옵션 내재변동성으로, 주가 하락 시 헤지 수요 급증 → 변동성 매수 → "
                      "VIX 상승이 구조적으로 결합되어 있음 (정의상 음의 상관, ★5에 가까운 정립된 메커니즘)",
+        "signal_meaning": "이 상관은 거의 항상 강하게 유지되는 게 정상입니다. "
+                           "오히려 **약해질 때**(예: -0.3대로) 주목하세요 — 주가가 떨어지는데 VIX가 "
+                           "별로 안 오른다는 뜻으로, 아직 시장이 패닉 상태가 아님을 의미합니다. "
+                           "반대로 -0.9 이상으로 과도하게 강해지면 옵션·헤지 수요가 시세를 주도하는 "
+                           "변동성 장세일 가능성을 점검하세요.",
     },
     "HY스프레드 ↔ S&P500": {
         "loader_a": lambda: get_fred_history_long("BAMLH0A0HYM2"),
@@ -540,14 +550,22 @@ CORRELATION_PAIRS = {
         "expected_sign": "음(-)",
         "mechanism": "신용스프레드 확대는 기업 부도위험 재평가를 반영 → 주식 위험프리미엄도 동반 상승하는 경향 "
                      "(★4, 신용시장이 주식시장보다 선행하는 경우가 역사적으로 많음)",
+        "signal_meaning": "**가장 실전적인 페어입니다.** 이 상관이 약해지거나 깨지면(예: 주가는 오르는데 "
+                           "스프레드도 같이 확대) 신용시장과 주식시장 중 하나가 틀렸다는 뜻입니다. "
+                           "신용시장이 보통 먼저 맞는 경우가 많으므로, 이 발산이 보이면 주식 쪽 낙관이 "
+                           "과도할 가능성을 우선 점검하세요.",
     },
-    "2s10s 금리차 ↔ S&P500": {
-        "loader_a": _spread_2s10s_long,
-        "loader_b": lambda: get_yahoo_history_long("^GSPC"),
-        "label_a": "2s10s(bp)", "label_b": "S&P500",
-        "expected_sign": "불안정(국면별 상이)",
-        "mechanism": "금리차 역전은 침체 선행지표이나, 역전 발생부터 실제 침체·주가 반응까지 통상 12~24개월 "
-                     "지연 — 단기 상관은 약하거나 불안정한 게 정상 (★3, 인과 경로가 길고 간접적)",
+    "섹터RS 1위 ↔ KOSPI": {
+        "loader_a": _strong_sector_etf_history,
+        "loader_b": lambda: get_yahoo_history_long("^KS11"),
+        "label_a": "강세섹터", "label_b": "KOSPI",
+        "expected_sign": "양(+), 국면에 따라 변동",
+        "mechanism": "특정 섹터가 시장 전체를 끌고 가는 국면(주도주 장세)에서는 상관이 강하게 나타나고, "
+                     "섹터 로테이션이 활발한 국면에서는 약해지는 경향 (★3, 시장구조적 가설이며 보도 기반 아님)",
+        "signal_meaning": "상관이 **강할 때**: 현재 강세섹터가 시장 전체 방향을 주도하고 있다는 뜻 — "
+                           "그 섹터 비중이 큰 포트폴리오라면 시장과 동반 변동성이 커집니다. "
+                           "상관이 **약해질 때**: 강세섹터 혼자만 오르고 시장 전체는 따라가지 못하는 "
+                           "좁은 장세(narrow rally)일 수 있어, 그 섹터 강세의 지속력에 의문을 가질 신호입니다.",
     },
     "USD/KRW ↔ 삼성전자": {
         "loader_a": lambda: get_yahoo_history_long("KRW=X"),
@@ -556,6 +574,9 @@ CORRELATION_PAIRS = {
         "expected_sign": "음(-)",
         "mechanism": "원화 약세(환율 상승)는 외국인 입장에서 원화자산 기대수익률 하락 → 외국인 매도 압력 "
                      "→ 삼성전자(시총 최대) 약세로 연결되는 경향 (★4, 패시브 펀드 벤치마크 효과 포함)",
+        "signal_meaning": "이 상관이 **깨지면**(환율 오르는데 삼성전자도 같이 오름) → 외국인 수급 효과보다 "
+                           "원화 약세에 따른 수출경쟁력 개선 기대(반도체 수출가격 우위)가 더 크게 작용 중이라는 "
+                           "뜻입니다. 환율-수급 프레임에서 환율-실적 프레임으로 해석을 전환할 신호입니다.",
     },
     "VIX ↔ HY스프레드": {
         "loader_a": lambda: get_yahoo_history_long("^VIX"),
@@ -564,14 +585,10 @@ CORRELATION_PAIRS = {
         "expected_sign": "양(+)",
         "mechanism": "둘 다 '리스크오프' 국면의 다른 표현형 — 변동성과 신용위험 프리미엄은 같은 거시 충격에 "
                      "동시 반응하는 경향 (★4, 같은 근본원인의 두 증상이라는 해석)",
-    },
-    "EWY ↔ 삼성전자": {
-        "loader_a": lambda: get_yahoo_history_long("EWY"),
-        "loader_b": lambda: get_yahoo_history_long("005930.KS"),
-        "label_a": "EWY", "label_b": "삼성전자",
-        "expected_sign": "양(+)",
-        "mechanism": "EWY(MSCI Korea ETF) 내 삼성전자 비중이 최대 — 거의 동어반복적 동행성 "
-                     "(★5에 가까움, 지수 구성상 구조적으로 결합)",
+        "signal_meaning": "**VIX만 급등, HY는 안 움직임** → 옵션 만기·헤지 수요 등 주식시장 국한 단기 이벤트일 "
+                           "가능성이 높아 구조적 위험은 아닐 수 있습니다. **HY만 확대, VIX는 안정** → "
+                           "특정 섹터·기업의 개별 신용 악화일 가능성이 높습니다. 둘 다 같이 움직이면 "
+                           "거시적 리스크오프가 본격화된 신호로 더 무겁게 받아들이세요.",
     },
 }
 
@@ -943,7 +960,10 @@ for ci, group in enumerate([pair_items[:half], pair_items[half:]]):
 
             btn_label = pair_name + "\n\n" + corr_str + "\n\n" + label
             with st.popover(btn_label, use_container_width=True):
-                st.markdown("**" + pair_name + " — " + window_choice + " 상관관계 상세**")
+                title_extra = ""
+                if pair_name == "섹터RS 1위 ↔ KOSPI":
+                    title_extra = " (현재 1위: " + _strong_sector_label() + ")"
+                st.markdown("**" + pair_name + title_extra + " — " + window_choice + " 상관관계 상세**")
 
                 mcol1, mcol2 = st.columns(2)
                 with mcol1:
@@ -969,12 +989,14 @@ for ci, group in enumerate([pair_items[:half], pair_items[half:]]):
                     "Fact ★5: 상관계수는 위 window 기간 실데이터 계산값 / "
                     "의견(메커니즘 가설, 확인된 보도 아님): " + meta["mechanism"]
                 )
+                st.markdown("**📌 시황 신호 해석**")
+                st.caption(meta["signal_meaning"])
 
-st.caption("6개 핵심 페어 · window 변경 시 전체 재계산 · 상관계수는 인과관계를 증명하지 않음")
+st.caption("5개 핵심 페어 · window 변경 시 전체 재계산 · 상관계수는 인과관계를 증명하지 않음")
 
 st.divider()
 
-
+st.subheader("🔀 발산 감지 — 지표 간 모순 자동 탐지")
 divergences = []
 if vix is not None and spx_52w is not None:
     if vix < 16 and spx_52w > 85:
