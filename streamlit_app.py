@@ -469,6 +469,141 @@ def compute_correlation(series_a, series_b, window=None):
         return None
 
 
+# === Phase 2: Rolling Correlation 엔진 ===
+
+def compute_rolling_correlation_series(series_a, series_b, window=60):
+    """두 시리즈의 rolling correlation 시계열 자체를 반환 (상관계수가 시간에 따라 어떻게 변했는지)"""
+    if series_a is None or series_b is None:
+        return None
+    try:
+        a = _normalize_index(series_a)
+        b = _normalize_index(series_b)
+        df = pd.DataFrame({"a": a, "b": b}).dropna()
+        if len(df) < window + 5:
+            return None
+        roll = df["a"].rolling(window).corr(df["b"]).dropna()
+        return roll
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=3600)
+def get_fred_history_long(series_id, days=500):
+    """2s10s 등 장기 window(120일) 계산에 충분한 길이의 FRED 히스토리"""
+    try:
+        fred = Fred(api_key=st.secrets["FRED_API_KEY"])
+        s = fred.get_series(series_id).dropna()
+        cutoff = pd.Timestamp.now() - pd.Timedelta(days=days)
+        return s[s.index >= cutoff]
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=1800)
+def get_yahoo_history_long(symbol, days=500):
+    try:
+        data = yf.Ticker(symbol).history(period="2y")
+        if len(data) >= 30:
+            s = data["Close"]
+            cutoff = pd.Timestamp.now(tz=s.index.tz) - pd.Timedelta(days=days)
+            return s[s.index >= cutoff]
+        return None
+    except Exception:
+        return None
+
+
+# 6개 핵심 페어 정의: (표시명, A시리즈 로더, B시리즈 로더, 메커니즘 가설, 신뢰도)
+def _spread_2s10s_long():
+    y10s = get_fred_history_long("DGS10")
+    y2s = get_fred_history_long("DGS2")
+    if y10s is None or y2s is None:
+        return None
+    a = _normalize_index(y10s)
+    b = _normalize_index(y2s)
+    df = pd.DataFrame({"a": a, "b": b}).dropna()
+    return (df["a"] - df["b"]) * 100  # bp
+
+
+CORRELATION_PAIRS = {
+    "VIX ↔ S&P500": {
+        "loader_a": lambda: get_yahoo_history_long("^VIX"),
+        "loader_b": lambda: get_yahoo_history_long("^GSPC"),
+        "label_a": "VIX", "label_b": "S&P500",
+        "expected_sign": "음(-)",
+        "mechanism": "VIX는 옵션 내재변동성으로, 주가 하락 시 헤지 수요 급증 → 변동성 매수 → "
+                     "VIX 상승이 구조적으로 결합되어 있음 (정의상 음의 상관, ★5에 가까운 정립된 메커니즘)",
+    },
+    "HY스프레드 ↔ S&P500": {
+        "loader_a": lambda: get_fred_history_long("BAMLH0A0HYM2"),
+        "loader_b": lambda: get_yahoo_history_long("^GSPC"),
+        "label_a": "HY스프레드", "label_b": "S&P500",
+        "expected_sign": "음(-)",
+        "mechanism": "신용스프레드 확대는 기업 부도위험 재평가를 반영 → 주식 위험프리미엄도 동반 상승하는 경향 "
+                     "(★4, 신용시장이 주식시장보다 선행하는 경우가 역사적으로 많음)",
+    },
+    "2s10s 금리차 ↔ S&P500": {
+        "loader_a": _spread_2s10s_long,
+        "loader_b": lambda: get_yahoo_history_long("^GSPC"),
+        "label_a": "2s10s(bp)", "label_b": "S&P500",
+        "expected_sign": "불안정(국면별 상이)",
+        "mechanism": "금리차 역전은 침체 선행지표이나, 역전 발생부터 실제 침체·주가 반응까지 통상 12~24개월 "
+                     "지연 — 단기 상관은 약하거나 불안정한 게 정상 (★3, 인과 경로가 길고 간접적)",
+    },
+    "USD/KRW ↔ 삼성전자": {
+        "loader_a": lambda: get_yahoo_history_long("KRW=X"),
+        "loader_b": lambda: get_yahoo_history_long("005930.KS"),
+        "label_a": "USD/KRW", "label_b": "삼성전자",
+        "expected_sign": "음(-)",
+        "mechanism": "원화 약세(환율 상승)는 외국인 입장에서 원화자산 기대수익률 하락 → 외국인 매도 압력 "
+                     "→ 삼성전자(시총 최대) 약세로 연결되는 경향 (★4, 패시브 펀드 벤치마크 효과 포함)",
+    },
+    "VIX ↔ HY스프레드": {
+        "loader_a": lambda: get_yahoo_history_long("^VIX"),
+        "loader_b": lambda: get_fred_history_long("BAMLH0A0HYM2"),
+        "label_a": "VIX", "label_b": "HY스프레드",
+        "expected_sign": "양(+)",
+        "mechanism": "둘 다 '리스크오프' 국면의 다른 표현형 — 변동성과 신용위험 프리미엄은 같은 거시 충격에 "
+                     "동시 반응하는 경향 (★4, 같은 근본원인의 두 증상이라는 해석)",
+    },
+    "EWY ↔ 삼성전자": {
+        "loader_a": lambda: get_yahoo_history_long("EWY"),
+        "loader_b": lambda: get_yahoo_history_long("005930.KS"),
+        "label_a": "EWY", "label_b": "삼성전자",
+        "expected_sign": "양(+)",
+        "mechanism": "EWY(MSCI Korea ETF) 내 삼성전자 비중이 최대 — 거의 동어반복적 동행성 "
+                     "(★5에 가까움, 지수 구성상 구조적으로 결합)",
+    },
+}
+
+
+def correlation_strength_label(corr):
+    if corr is None:
+        return "데이터 부족", "#6a7d98"
+    abs_c = abs(corr)
+    if abs_c >= 0.7:
+        return "강한 상관", "#1ecc7a" if corr > 0 else "#e04858"
+    elif abs_c >= 0.4:
+        return "중간 상관", "#f0a030"
+    else:
+        return "약한/없음", "#6a7d98"
+
+
+def make_rolling_corr_chart(roll_series, window):
+    fig = go.Figure()
+    colors = ["#1ecc7a" if v >= 0 else "#e04858" for v in roll_series.values]
+    fig.add_trace(go.Bar(x=roll_series.index, y=roll_series.values, marker_color=colors, name="상관계수"))
+    fig.add_hline(y=0, line_color="#3d5070", opacity=0.6)
+    fig.add_hline(y=0.7, line_dash="dash", line_color="#1ecc7a", opacity=0.3)
+    fig.add_hline(y=-0.7, line_dash="dash", line_color="#e04858", opacity=0.3)
+    fig.update_layout(
+        template="plotly_dark", paper_bgcolor="#0a0d14", plot_bgcolor="#0a0d14",
+        height=200, margin=dict(l=10, r=10, t=10, b=10),
+        font=dict(family="monospace", size=10, color="#aab8d0"), showlegend=False,
+        yaxis=dict(range=[-1, 1]),
+    )
+    return fig
+
+
 kst = datetime.now(pytz.timezone("Asia/Seoul"))
 now_str = kst.strftime("%Y.%m.%d %H:%M")
 
@@ -788,7 +923,58 @@ else:
 
 st.divider()
 
-st.subheader("🔀 발산 감지 — 지표 간 모순 자동 탐지")
+st.subheader("📊 상관관계 모니터 — Rolling Correlation 엔진")
+window_choice = st.radio("Window", ["60일", "90일", "120일"], index=1, horizontal=True, key="corr_window")
+corr_window = {"60일": 60, "90일": 90, "120일": 120}[window_choice]
+
+ccol1, ccol2 = st.columns(2)
+pair_items = list(CORRELATION_PAIRS.items())
+half = (len(pair_items) + 1) // 2
+
+for ci, group in enumerate([pair_items[:half], pair_items[half:]]):
+    target = ccol1 if ci == 0 else ccol2
+    with target:
+        for pair_name, meta in group:
+            series_a = meta["loader_a"]()
+            series_b = meta["loader_b"]()
+            corr = compute_correlation(series_a, series_b, window=corr_window)
+            label, color = correlation_strength_label(corr)
+            corr_str = format(corr, "+.2f") if corr is not None else "-"
+
+            btn_label = pair_name + "\n\n" + corr_str + "\n\n" + label
+            with st.popover(btn_label, use_container_width=True):
+                st.markdown("**" + pair_name + " — " + window_choice + " 상관관계 상세**")
+
+                mcol1, mcol2 = st.columns(2)
+                with mcol1:
+                    st.metric(window_choice + " 상관계수", corr_str)
+                with mcol2:
+                    st.metric("기대 방향성", meta["expected_sign"])
+
+                roll = compute_rolling_correlation_series(series_a, series_b, window=corr_window)
+                if roll is not None and len(roll) > 0:
+                    st.plotly_chart(make_rolling_corr_chart(roll, corr_window), use_container_width=True)
+                    roll_now = roll.iloc[-1]
+                    roll_avg = roll.mean()
+                    deviation = roll_now - roll_avg
+                    st.caption(
+                        "현재 " + format(roll_now, "+.2f") + " vs 표시기간 평균 " + format(roll_avg, "+.2f") +
+                        " (편차 " + format(deviation, "+.2f") + ") · 점선 ±0.7은 강한 상관 기준선"
+                    )
+                else:
+                    st.warning("Rolling 시계열 계산을 위한 데이터가 부족합니다 (window+여유분 필요)")
+
+                st.markdown("---")
+                st.caption(
+                    "Fact ★5: 상관계수는 위 window 기간 실데이터 계산값 / "
+                    "의견(메커니즘 가설, 확인된 보도 아님): " + meta["mechanism"]
+                )
+
+st.caption("6개 핵심 페어 · window 변경 시 전체 재계산 · 상관계수는 인과관계를 증명하지 않음")
+
+st.divider()
+
+
 divergences = []
 if vix is not None and spx_52w is not None:
     if vix < 16 and spx_52w > 85:
