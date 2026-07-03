@@ -1,39 +1,3 @@
-import streamlit as st
-import yfinance as yf
-from fredapi import Fred
-from datetime import datetime, timedelta
-import pandas as pd
-import pytz
-import plotly.graph_objects as go
-
-st.set_page_config(page_title="IJ-HUB", layout="wide", page_icon="📊")
-
-st.markdown("""
-<style>
-.stApp { background-color: #0a0d14; }
-.main .block-container { padding-top: 2rem; max-width: 1200px; }
-h1, h2, h3 { color: #dce8f8 !important; font-family: monospace; }
-[data-testid="stMetricValue"] { font-family: monospace; font-size: 1.3rem; }
-[data-testid="stMetricLabel"] { font-family: monospace; color: #6a7d98 !important; }
-.judgment-box {
-    background: linear-gradient(135deg, #10151f, #141a26);
-    border: 1px solid #2a3d5a; border-left: 3px solid #1ecc7a;
-    border-radius: 8px; padding: 18px 22px; margin-bottom: 8px;
-}
-.judgment-box.warn { border-left-color: #f0a030; }
-.judgment-box.danger { border-left-color: #e04858; }
-.jb-label { font-family: monospace; font-size: 11px; letter-spacing: 0.1em;
-    text-transform: uppercase; color: #6a7d98; }
-.jb-value { font-size: 26px; font-weight: 700; margin: 4px 0; }
-.jb-sub { font-size: 13px; color: #aab8d0; }
-.div-card {
-    background: #10151f; border: 1px solid #2a3d5a;
-    border-radius: 7px; padding: 12px 15px; margin-bottom: 8px;
-}
-.div-card.high { border-left: 3px solid #e04858; }
-.div-card.mid { border-left: 3px solid #f0a030; }
-.div-pair { font-family: monospace; font-size: 12px; font-weight: 700; color: #dce8f8; }
-.div-desc { font-size: 12px; color: #aab8d0; margin-top: 4px; }
 .div-imp { font-size: 11px; color: #f0a030; margin-top: 5px; }
 .scen-box {
     background: #10151f; border: 1px solid #2a3d5a;
